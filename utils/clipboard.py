@@ -1,32 +1,17 @@
+from tkinter import ttk
 import tkinter as tk
 
-def enable_clipboard_copy(widget):
-    """Делает так, чтобы Ctrl+C копировал выделенный текст в буфер обмена."""
-    if isinstance(widget, tk.Text):
-        widget.bind('<Control-c>', lambda e: widget.event_generate('<<Copy>>'))
-    elif isinstance(widget, tk.Entry):
-        widget.bind('<Control-c>', lambda e: widget.event_generate('<<Copy>>'))
-    elif isinstance(widget, ttk.Entry):
-        widget.bind('<Control-c>', lambda e: widget.event_generate('<<Copy>>'))
-    elif isinstance(widget, tk.Listbox):
-        widget.bind('<Control-c>', lambda e: _copy_listbox_selection(widget))
-    elif isinstance(widget, ttk.Treeview):
-        widget.bind('<Control-c>', lambda e: _copy_treeview_selection(widget))
-
-def _copy_listbox_selection(listbox):
-    sel = listbox.curselection()
-    if sel:
-        text = '\n'.join([listbox.get(i) for i in sel])
-        listbox.clipboard_clear()
-        listbox.clipboard_append(text)
-
-def _copy_treeview_selection(tree):
-    sel = tree.selection()
-    if sel:
-        rows = []
-        for iid in sel:
-            values = tree.item(iid, 'values')
-            rows.append('\t'.join(map(str, values)))
-        text = '\n'.join(rows)
-        tree.clipboard_clear()
-        tree.clipboard_append(text)
+def enable_clipboard_copy(widget, get_text_func=None):
+    """Добавляет возможность копирования текста через Ctrl+C и контекстное меню."""
+    def copy_to_clipboard(event=None):
+        text = get_text_func() if get_text_func else ""
+        if text:
+            widget.clipboard_clear()
+            widget.clipboard_append(text)
+    widget.bind('<Control-c>', copy_to_clipboard)
+    widget.bind('<Control-C>', copy_to_clipboard)
+    menu = tk.Menu(widget, tearoff=0)
+    menu.add_command(label="Копировать", command=copy_to_clipboard)
+    def show_menu(event):
+        menu.post(event.x_root, event.y_root)
+    widget.bind('<Button-3>', show_menu)

@@ -6,7 +6,6 @@ class HelpTab(ttk.Frame):
         super().__init__(parent)
         self.app = app
         self.create_widgets()
-        self.master.add(self, text="Справка")
 
     def create_widgets(self):
         text = scrolledtext.ScrolledText(self, wrap=tk.WORD, bg='#ffffff', fg='#000000',
@@ -14,7 +13,7 @@ class HelpTab(ttk.Frame):
         text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         content = """
 ╔══════════════════════════════════════════════════════════════╗
-║                    AVZ-Aristo RAGE v25.4                     ║
+║                    AVZ-Aristo RAGE v25.5.1                  ║
 ╠══════════════════════════════════════════════════════════════╣
 ║ Методы атаки (вкладка "Атака"):                             ║
 ║   GET, POST, CFB, CFBUAM, RAPID, TCP, UDP, SYN_FLOOD       ║

