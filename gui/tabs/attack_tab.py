@@ -21,11 +21,10 @@ PRESETS = {
     }
 }
 
-class AttackTab:
-    def __init__(self, notebook, app):
+class AttackTab(ttk.Frame):
+    def __init__(self, parent, app):
+        super().__init__(parent)
         self.app = app
-        self.frame = ttk.Frame(notebook)
-        notebook.add(self.frame, text="💥 Атака")
         self.proxy_mgr = app.proxy_manager
         self.attack_active = False
         self.engine = None
@@ -36,10 +35,10 @@ class AttackTab:
         self.app.logger.info("Вкладка Атаки v3.0 инициализирована")
 
     def _build_ui(self):
-        self.frame.columnconfigure(0, weight=1)
-        self.frame.rowconfigure(1, weight=1)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(1, weight=1)
 
-        top = ttk.Frame(self.frame)
+        top = ttk.Frame(self)
         top.grid(row=0, column=0, sticky='ew', padx=10, pady=5)
         ttk.Label(top, text="Цель:").pack(side=tk.LEFT)
         self.target_entry = ttk.Entry(top, width=50)
@@ -66,16 +65,16 @@ class AttackTab:
         ttk.Button(top, text="🗑", command=self._delete_profile).pack(side=tk.LEFT)
         self._refresh_profiles()
 
-        self.sub_notebook = ttk.Notebook(self.frame)
+        self.sub_notebook = ttk.Notebook(self)
         self.sub_notebook.grid(row=1, column=0, sticky='nsew', padx=10, pady=5)
         self._build_l7_tab(self.sub_notebook)
         self._build_l4_tab(self.sub_notebook)
 
-        bottom = ttk.Frame(self.frame)
+        bottom = ttk.Frame(self)
         bottom.grid(row=2, column=0, sticky='ew', padx=10, pady=5)
         self._build_bottom_panel(bottom)
 
-        log_frame = ttk.Frame(self.frame)
+        log_frame = ttk.Frame(self)
         log_frame.grid(row=3, column=0, sticky='nsew', padx=10, pady=5)
         log_bg = '#121212' if self.app.theme=='dark' else 'white'
         log_fg = '#00ff41' if self.app.theme=='dark' else 'black'
@@ -96,7 +95,6 @@ class AttackTab:
         notebook.add(l7, text="L7")
         ttk.Label(l7, text="Метод:").grid(row=0, column=0, sticky='w', padx=5, pady=5)
         self.method_var = tk.StringVar(value="CFBUAM")
-        # Убраны BOT и SLOWLORIS – они не реализованы в движке
         methods = ttk.Combobox(l7, textvariable=self.method_var,
                                values=["GET","POST","CFB","CFBUAM","RAPID"], state='readonly', width=15)
         methods.grid(row=0, column=1, sticky='w')
@@ -106,33 +104,24 @@ class AttackTab:
         self.flare_url_var = tk.StringVar()
         ttk.Label(adv, text="FlareSolverr:").grid(row=0, column=0, sticky='w')
         ttk.Entry(adv, textvariable=self.flare_url_var, width=30).grid(row=0, column=1, padx=5)
-        ToolTip(adv.winfo_children()[-1], "URL вашего FlareSolverr-сервера (http://localhost:8191/v1)")
         self.ja3_var = tk.StringVar(value="none")
         ttk.Label(adv, text="JA3:").grid(row=1, column=0, sticky='w')
         ttk.Combobox(adv, textvariable=self.ja3_var, values=["none","chrome120","random"], state='readonly', width=14).grid(row=1, column=1, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Подмена TLS-отпечатка браузера")
         self.h2_var = tk.BooleanVar()
         ttk.Checkbutton(adv, text="HTTP/2", variable=self.h2_var).grid(row=2, column=0, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Мультиплексирование HTTP/2")
         self.storm_var = tk.BooleanVar()
         ttk.Checkbutton(adv, text="Браузерный шторм", variable=self.storm_var).grid(row=2, column=1, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Имитация браузера: заголовки, куки, referer")
         self.smart_flood_var = tk.BooleanVar()
         ttk.Checkbutton(adv, text="Умный флуд", variable=self.smart_flood_var).grid(row=3, column=0, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Случайные URL-пути для повышения нагрузки")
         self.berserk_var = tk.BooleanVar()
         ttk.Checkbutton(adv, text="Берсерк", variable=self.berserk_var).grid(row=3, column=1, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Автосмена методов при банах")
         self.stealth_var = tk.BooleanVar()
         ttk.Checkbutton(adv, text="Тихая", variable=self.stealth_var).grid(row=4, column=0, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "1 поток, имитация человека")
         self.adaptive_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(adv, text="Адаптивный", variable=self.adaptive_var).grid(row=4, column=1, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Автоподстройка числа потоков")
         ttk.Label(adv, text="Задержка (мс):").grid(row=5, column=0, sticky='w')
         self.jitter_var = tk.IntVar(value=0)
         ttk.Spinbox(adv, from_=0, to=200, width=5, textvariable=self.jitter_var).grid(row=5, column=1, sticky='w')
-        ToolTip(adv.winfo_children()[-1], "Пауза между запросами в миллисекундах")
 
         self.indicators = {}
         for idx, (var, name, row, col) in enumerate([
@@ -151,7 +140,6 @@ class AttackTab:
         ttk.Label(l4, text="Метод:").grid(row=0, column=0, sticky='w', padx=5, pady=5)
         self.l4_method_var = tk.StringVar(value="UDP")
         ttk.Combobox(l4, textvariable=self.l4_method_var, values=["TCP","UDP","SYN_FLOOD"], state='readonly', width=10).grid(row=0, column=1, sticky='w')
-        ToolTip(l4.winfo_children()[-1], "TCP — флуд соединениями, UDP — флуд датаграммами, SYN_FLOOD — SYN-пакеты (scapy, права админа)")
         ttk.Label(l4, text="Порт:").grid(row=1, column=0, sticky='w', padx=5, pady=5)
         self.port_var = tk.IntVar(value=80)
         ttk.Entry(l4, textvariable=self.port_var, width=8).grid(row=1, column=1, sticky='w')
@@ -159,7 +147,6 @@ class AttackTab:
         ttk.Checkbutton(l4, text="Случайный размер пакета (UDP)", variable=self.l4_random_size).grid(row=2, column=0, columnspan=2, sticky='w')
         self.hybrid_var = tk.BooleanVar()
         ttk.Checkbutton(l4, text="ГИБРИДНАЯ АТАКА (L7+L4 одновременно)", variable=self.hybrid_var).grid(row=3, column=0, columnspan=2, sticky='w', pady=5)
-        ToolTip(l4.winfo_children()[-1], "Запускает L7-флуд и выбранный L4-метод одновременно. Для SYN_FLOOD нужны scapy и права администратора.")
 
     def _build_bottom_panel(self, parent):
         proxy_frame = ttk.LabelFrame(parent, text="Прокси", padding=5)
@@ -182,10 +169,8 @@ class AttackTab:
         ttk.Label(ctrl_frame, text="Потоки:").grid(row=0, column=0, sticky='w')
         self.threads_var = tk.IntVar(value=100)
         ttk.Spinbox(ctrl_frame, from_=1, to=10000, increment=10, textvariable=self.threads_var, width=6).grid(row=0, column=1, sticky='w')
-        ToolTip(ctrl_frame.winfo_children()[-1], "Количество одновременных запросов")
         self.power_var = tk.BooleanVar()
         ttk.Checkbutton(ctrl_frame, text="Макс", variable=self.power_var).grid(row=0, column=2, sticky='w')
-
         ttk.Label(ctrl_frame, text="Лимит времени (сек):").grid(row=1, column=0, sticky='w')
         self.time_limit_var = tk.IntVar(value=0)
         ttk.Spinbox(ctrl_frame, from_=0, to=3600, textvariable=self.time_limit_var, width=6).grid(row=1, column=1, sticky='w')
@@ -207,8 +192,7 @@ class AttackTab:
     # ---- Профили, пресеты, атака ----
     def _apply_preset(self):
         name = self.preset_var.get()
-        if name not in PRESETS:
-            return
+        if name not in PRESETS: return
         p = PRESETS[name]
         self.method_var.set(p.get('method', 'CFBUAM'))
         self.flare_url_var.set(p.get('flare', ''))
@@ -327,7 +311,6 @@ class AttackTab:
         ja3 = self.ja3_var.get()
         ja3_profile = None if ja3 == "none" else ja3
         random_ja3 = (ja3 == "random")
-        slowloris = (method == "SLOWLORIS")  # оставлено для совместимости, но метод удалён
         smart_flood = self.smart_flood_var.get()
         berserk = self.berserk_var.get()
         udp_random_size = self.l4_random_size.get()
@@ -343,7 +326,6 @@ class AttackTab:
             use_h2=self.h2_var.get(),
             adaptive=self.adaptive_var.get(),
             random_ja3=random_ja3,
-            slowloris=slowloris,
             smart_flood=smart_flood,
             berserk=berserk,
             l4_method=l4_method,
@@ -356,8 +338,8 @@ class AttackTab:
         self.progress_var.set(0)
         self.log.insert(tk.END, "[*] Атака начата\n", "info")
         self.app.logger.info(f"Атака: {target} метод {method} потоков {threads}")
-        self.app.set_status("Атака", f"Цель: {target} | Метод: {method} | Потоков: {threads}")
-
+        if hasattr(self.app, 'set_status'):
+            self.app.set_status("Атака", f"Цель: {target} | Метод: {method} | Потоков: {threads}")
         self.time_limit = self.time_limit_var.get()
         self.time_start = time.time()
         threading.Thread(target=self._run_attack, args=(target, method, threads, hybrid, l4_method), daemon=True).start()
@@ -365,7 +347,8 @@ class AttackTab:
     def _run_attack(self, target, method, threads, hybrid, l4_method):
         start = time.time()
         def progress(rps, total):
-            self.app.update_monitor(rps, total)
+            if hasattr(self.app, 'update_monitor'):
+                self.app.update_monitor(rps, total)
             self._log_colored(f"RPS: {rps:.1f} | Запросов: {total}\n", "success")
             if self.time_limit > 0 and time.time() - self.time_start > self.time_limit:
                 self.engine.stop()
@@ -381,12 +364,14 @@ class AttackTab:
 
         end = time.time()
         total_requests = self.engine.stats['count']
-        self.app.save_attack_history(target, method, threads, start, end, total_requests)
+        if hasattr(self.app, 'save_attack_history'):
+            self.app.save_attack_history(target, method, threads, start, end, total_requests)
         self.attack_active = False
-        self.frame.after(0, self._attack_finished)
+        self.after(0, self._attack_finished)
         self._log_colored(f"[✓] Атака завершена за {end-start:.1f}с, запросов: {total_requests}\n", "info")
         self._notify_telegram(target, method, threads, end-start, total_requests)
-        self.app.show_toast(f"Атака завершена: {total_requests} запросов за {end-start:.1f}с")
+        if hasattr(self.app, 'show_toast'):
+            self.app.show_toast(f"Атака завершена: {total_requests} запросов за {end-start:.1f}с")
 
     def _stop_attack(self):
         if self.engine:
@@ -401,7 +386,7 @@ class AttackTab:
             custom = self.custom_proxy_text.get("1.0", tk.END).strip()
             if custom:
                 return [line.strip() for line in custom.splitlines() if line.strip()]
-        if self.proxy_mgr and self.proxy_mgr.proxies:
+        if self.proxy_mgr and hasattr(self.proxy_mgr, 'proxies'):
             if mode == "best":
                 return self.proxy_mgr.get_best_proxies(50)
             elif mode == "all":
@@ -413,8 +398,8 @@ class AttackTab:
         return []
 
     def _notify_telegram(self, target, method, threads, duration, total_requests):
-        token = self.app.settings.get('telegram_token', '')
-        chat_id = self.app.settings.get('telegram_chat_id', '')
+        token = getattr(self.app, 'settings', {}).get('telegram_token', '')
+        chat_id = getattr(self.app, 'settings', {}).get('telegram_chat_id', '')
         if not token or not chat_id: return
         try:
             msg = f"✅ Атака завершена\nЦель: {target}\nМетод: {method}\nПотоков: {threads}\nДлительность: {duration:.1f}с\nЗапросов: {total_requests}"
@@ -429,7 +414,7 @@ class AttackTab:
     def _animate_button(self, count):
         if not self._animating or not self.attack_active: return
         self.attack_btn.config(text="⚡ АТАКА..." if count % 2 == 0 else "⚡⚡ АТАКА...")
-        self.frame.after(500, self._animate_button, count + 1)
+        self.after(500, self._animate_button, count + 1)
 
     def _attack_finished(self):
         self._animating = False
@@ -437,7 +422,8 @@ class AttackTab:
         self.stop_btn.config(state=tk.DISABLED)
         self.progress_var.set(0)
         self.status_label.config(text="Готов")
-        self.app.set_status("Готов")
+        if hasattr(self.app, 'set_status'):
+            self.app.set_status("Готов")
 
     def _log_colored(self, msg, tag):
         self.log.insert(tk.END, msg, tag)
