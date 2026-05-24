@@ -1,0 +1,284 @@
+{
+  "timestamp": 1779383611.9575295,
+  "proxies": [
+    {
+      "ip": "79.110.200.148",
+      "port": "8081",
+      "type": "http",
+      "speed": 0.371,
+      "score": 5.6899999999999995,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "102.129.170.123",
+      "port": "37234",
+      "type": "socks5",
+      "speed": 3.907,
+      "score": 3.26,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "47.254.36.213",
+      "port": "104",
+      "type": "http",
+      "speed": 4.413,
+      "score": 3.23,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "47.254.36.213",
+      "port": "104",
+      "type": "socks5",
+      "speed": 4.429,
+      "score": 3.23,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.209.96.245",
+      "port": "80",
+      "type": "socks5",
+      "speed": 2.14,
+      "score": 3.4699999999999998,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.221.138.111",
+      "port": "8072",
+      "type": "http",
+      "speed": 2.686,
+      "score": 3.37,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "116.80.76.252",
+      "port": "7779",
+      "type": "socks5",
+      "speed": 4.124,
+      "score": 0.24,
+      "country": "",
+      "anonymous": "transparent"
+    },
+    {
+      "ip": "8.211.49.86",
+      "port": "10000",
+      "type": "http",
+      "speed": 2.138,
+      "score": 3.4699999999999998,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.221.138.111",
+      "port": "40",
+      "type": "socks5",
+      "speed": 2.672,
+      "score": 3.37,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.212.151.166",
+      "port": "80",
+      "type": "socks5",
+      "speed": 3.07,
+      "score": 3.33,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "47.90.149.238",
+      "port": "9999",
+      "type": "socks5",
+      "speed": 2.33,
+      "score": 3.43,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "185.82.218.85",
+      "port": "80",
+      "type": "http",
+      "speed": 0.441,
+      "score": 5.27,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.221.139.222",
+      "port": "39",
+      "type": "http",
+      "speed": 2.69,
+      "score": 3.37,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.209.96.245",
+      "port": "80",
+      "type": "http",
+      "speed": 2.14,
+      "score": 3.4699999999999998,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "181.119.97.24",
+      "port": "999",
+      "type": "socks5",
+      "speed": 1.077,
+      "score": 3.93,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.211.200.183",
+      "port": "8443",
+      "type": "socks5",
+      "speed": 2.153,
+      "score": 3.46,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "58.216.109.8",
+      "port": "800",
+      "type": "socks5",
+      "speed": 3.647,
+      "score": 3.27,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "45.123.142.175",
+      "port": "8080",
+      "type": "http",
+      "speed": 2.199,
+      "score": 3.45,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.213.128.6",
+      "port": "8014",
+      "type": "http",
+      "speed": 3.333,
+      "score": 3.3,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "157.90.10.15",
+      "port": "2030",
+      "type": "http",
+      "speed": 3.36,
+      "score": 3.3,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.219.5.240",
+      "port": "20201",
+      "type": "socks5",
+      "speed": 4.498,
+      "score": 3.22,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "115.29.148.215",
+      "port": "8181",
+      "type": "socks5",
+      "speed": 4.674,
+      "score": 3.21,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.215.12.103",
+      "port": "8447",
+      "type": "http",
+      "speed": 2.464,
+      "score": 3.41,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "47.91.89.3",
+      "port": "1111",
+      "type": "socks5",
+      "speed": 2.136,
+      "score": 3.4699999999999998,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "103.167.171.149",
+      "port": "7778",
+      "type": "socks5",
+      "speed": 3.924,
+      "score": 3.25,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "8.209.96.245",
+      "port": "193",
+      "type": "http",
+      "speed": 2.134,
+      "score": 3.4699999999999998,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "157.90.10.15",
+      "port": "10902",
+      "type": "http",
+      "speed": 4.371,
+      "score": 3.23,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "157.90.10.15",
+      "port": "51525",
+      "type": "http",
+      "speed": 4.425,
+      "score": 3.23,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "61.158.175.38",
+      "port": "9002",
+      "type": "socks5",
+      "speed": 1.229,
+      "score": 3.81,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "18.207.127.221",
+      "port": "8088",
+      "type": "http",
+      "speed": 0.288,
+      "score": 6.470000000000001,
+      "country": "",
+      "anonymous": "elite"
+    },
+    {
+      "ip": "185.82.218.85",
+      "port": "80",
+      "type": "socks5",
+      "speed": 3.678,
+      "score": 3.27,
+      "country": "",
+      "anonymous": "elite"
+    }
+  ]
+}
