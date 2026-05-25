@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import json, os, threading, time
+from gui.widgets import RightClickMenu
 
 class AutoTab:
     def __init__(self, notebook, app):
@@ -17,6 +18,7 @@ class AutoTab:
         ttk.Label(main, text="Цель:").pack(anchor='w')
         self.target_entry = ttk.Entry(main, width=40)
         self.target_entry.pack(fill=tk.X, pady=2)
+        RightClickMenu(self.target_entry)
 
         f = ttk.Frame(main)
         f.pack(fill=tk.X, pady=2)
@@ -24,6 +26,7 @@ class AutoTab:
         self.interval = ttk.Entry(f, width=10)
         self.interval.insert(0, "60")
         self.interval.pack(side=tk.LEFT, padx=5)
+        RightClickMenu(self.interval)
         ttk.Button(f, text="Запустить", command=self.start_scheduler).pack(side=tk.LEFT, padx=5)
         ttk.Button(f, text="Стоп", command=self.stop_scheduler).pack(side=tk.LEFT)
 
@@ -47,6 +50,5 @@ class AutoTab:
 
     def _loop(self, target, interval):
         while self.running:
-            # Здесь вызов атаки через движок
             self.app.logger.info(f"[Планировщик] Атака {target}")
             time.sleep(interval)

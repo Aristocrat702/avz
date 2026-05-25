@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading, requests
+from gui.widgets import RightClickMenu
 
 class ProxyTab:
     def __init__(self, notebook, app):
@@ -18,6 +19,7 @@ class ProxyTab:
 
         self.listbox = tk.Listbox(main, bg='white')
         self.listbox.pack(fill=tk.BOTH, expand=True)
+        RightClickMenu(self.listbox, get_text_func=lambda: self.listbox.get(tk.ACTIVE))
 
     def refresh_proxies(self):
         def fetch():

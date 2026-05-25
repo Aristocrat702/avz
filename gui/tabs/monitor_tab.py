@@ -5,6 +5,7 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading, time, random
+from gui.widgets import RightClickMenu
 
 class MonitorTab:
     def __init__(self, notebook, app):
@@ -28,6 +29,11 @@ class MonitorTab:
         self.btn_start.pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="■ Стоп", command=self.stop_monitoring).pack(side=tk.LEFT, padx=5)
 
+        # Добавляем подпись к графику с возможностью копирования
+        self.stats_label = tk.Label(self.frame, text="RPS: 0", anchor='w')
+        self.stats_label.pack(fill=tk.X, padx=5)
+        RightClickMenu(self.stats_label, get_text_func=lambda: self.stats_label.cget("text"))
+
     def start_monitoring(self):
         if not self.running:
             self.running = True
@@ -46,6 +52,7 @@ class MonitorTab:
                 rps = random.randint(0, 1000)
                 self.rps_history.append(rps)
                 self.rps_history.pop(0)
+                self.stats_label.config(text=f"RPS: {rps}")
             except:
                 pass
             time.sleep(1)

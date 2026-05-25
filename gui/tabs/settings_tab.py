@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import json, os
+from gui.widgets import RightClickMenu
 
 class SettingsTab:
     def __init__(self, notebook, app):
@@ -18,18 +19,22 @@ class SettingsTab:
         ttk.Label(main, text="Telegram токен:").grid(row=1, column=0, sticky='w')
         self.tg_token = ttk.Entry(main, width=50)
         self.tg_token.grid(row=1, column=1, padx=5)
+        RightClickMenu(self.tg_token)
 
         ttk.Label(main, text="Telegram chat ID:").grid(row=2, column=0, sticky='w')
         self.tg_chat = ttk.Entry(main, width=50)
         self.tg_chat.grid(row=2, column=1, padx=5)
+        RightClickMenu(self.tg_chat)
 
         ttk.Label(main, text="Spyderproxy строка:").grid(row=3, column=0, sticky='w')
         self.proxy_url = ttk.Entry(main, width=50)
         self.proxy_url.grid(row=3, column=1, padx=5)
+        RightClickMenu(self.proxy_url)
 
         ttk.Label(main, text="Папка loot:").grid(row=4, column=0, sticky='w')
         self.loot_dir = ttk.Entry(main, width=50)
         self.loot_dir.grid(row=4, column=1, padx=5)
+        RightClickMenu(self.loot_dir)
 
         ttk.Button(main, text="Сохранить", command=self.save_settings).grid(row=5, column=0, columnspan=2, pady=10)
 

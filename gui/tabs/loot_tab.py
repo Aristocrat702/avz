@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import os, json, threading
+from gui.widgets import RightClickMenu
 
 class LootTab:
     def __init__(self, notebook, app):
@@ -16,9 +17,11 @@ class LootTab:
 
         self.listbox = tk.Listbox(main, bg='white')
         self.listbox.pack(fill=tk.BOTH, expand=True, pady=5)
+        RightClickMenu(self.listbox, get_text_func=lambda: self.listbox.get(tk.ACTIVE))
         ttk.Button(main, text="Обновить", command=self.refresh).pack(pady=2)
         self.content = scrolledtext.ScrolledText(main, height=10, bg='white')
         self.content.pack(fill=tk.BOTH, expand=True)
+        RightClickMenu(self.content)
         self.listbox.bind('<<ListboxSelect>>', self.show_content)
 
     def refresh(self):

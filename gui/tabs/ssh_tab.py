@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import threading, socket, paramiko
+import threading, socket
+from gui.widgets import RightClickMenu
 
 class SSHTab(ttk.Frame):
     def __init__(self, parent, app=None):
@@ -17,12 +18,15 @@ class SSHTab(ttk.Frame):
         ttk.Label(main, text="IP:Port").grid(row=1, column=0, sticky='w')
         self.ip_entry = ttk.Entry(main, width=18)
         self.ip_entry.grid(row=1, column=1, padx=5)
+        RightClickMenu(self.ip_entry)
         ttk.Label(main, text="User").grid(row=1, column=2, sticky='w')
         self.user_entry = ttk.Entry(main, width=12)
         self.user_entry.grid(row=1, column=3, padx=5)
+        RightClickMenu(self.user_entry)
         ttk.Label(main, text="Pass").grid(row=1, column=4, sticky='w')
         self.pass_entry = ttk.Entry(main, width=12, show="*")
         self.pass_entry.grid(row=1, column=5, padx=5)
+        RightClickMenu(self.pass_entry)
 
         ttk.Button(main, text="Добавить", command=self.add_node).grid(row=2, column=0, columnspan=6, pady=5)
 
@@ -34,6 +38,7 @@ class SSHTab(ttk.Frame):
         self.tree.column("user", width=100)
         self.tree.column("status", width=80)
         self.tree.grid(row=3, column=0, columnspan=6, pady=10, sticky='nsew')
+        RightClickMenu(self.tree, get_text_func=lambda: self.tree.item(self.tree.selection()[0], 'values')[0] if self.tree.selection() else "")
 
         btn_frame = ttk.Frame(main)
         btn_frame.grid(row=4, column=0, columnspan=6, pady=5)
@@ -63,9 +68,10 @@ class SSHTab(ttk.Frame):
             return
         item = selected[0]
         ip, user, _ = self.tree.item(item, 'values')
-        passwd = self.pass_entry.get()  # упрощённо – пароль берётся из поля
+        passwd = self.pass_entry.get()
         def check():
             try:
+                import paramiko
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(ip, username=user, password=passwd, timeout=3)
