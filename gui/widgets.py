@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from utils.clipboard import enable_clipboard_copy
-import winsound  # для звуковых уведомлений (Windows)
+import winsound
 
 class ToolTip:
     def __init__(self, widget, text):

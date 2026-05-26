@@ -5,7 +5,6 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import threading, time, random
-from gui.widgets import RightClickMenu
 
 class MonitorTab:
     def __init__(self, notebook, app):
@@ -29,10 +28,8 @@ class MonitorTab:
         self.btn_start.pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="■ Стоп", command=self.stop_monitoring).pack(side=tk.LEFT, padx=5)
 
-        # Добавляем подпись к графику с возможностью копирования
-        self.stats_label = tk.Label(self.frame, text="RPS: 0", anchor='w')
-        self.stats_label.pack(fill=tk.X, padx=5)
-        RightClickMenu(self.stats_label, get_text_func=lambda: self.stats_label.cget("text"))
+        self.stats_label = ttk.Label(self.frame, text="RPS: 0")
+        self.stats_label.pack()
 
     def start_monitoring(self):
         if not self.running:
@@ -48,8 +45,11 @@ class MonitorTab:
     def _fetch_data_loop(self):
         while self.running:
             try:
-                # Здесь должен быть реальный сбор RPS от движка или C2
-                rps = random.randint(0, 1000)
+                # Получаем RPS из движка атаки
+                if hasattr(self.app, 'attack_engine') and self.app.attack_engine:
+                    rps = self.app.attack_engine.stats.get('rps', 0)
+                else:
+                    rps = 0
                 self.rps_history.append(rps)
                 self.rps_history.pop(0)
                 self.stats_label.config(text=f"RPS: {rps}")

