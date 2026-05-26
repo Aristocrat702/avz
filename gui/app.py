@@ -18,11 +18,12 @@ from utils.toast import Toast
 from engine.proxy import ProxyManager
 from utils.logger import Logger
 from utils.helpers import load_settings
+from utils.clipboard import enable_global_clipboard
 
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v25.16 RAGE")
+        self.root.title("AVZ-Aristo v25.17.3 RAGE")
         self.root.geometry("1200x800")
         self.root.configure(bg="#f0f0f0")
         self.theme = 'light'
@@ -42,6 +43,8 @@ class App:
         self.logger = Logger()
         self._create_notebook()
         self.logger.info("AVZ-Aristo GUI запущен")
+        # Включаем глобальный клипборд для всех виджетов
+        enable_global_clipboard(self.root)
 
     def _create_notebook(self):
         style = ttk.Style()
