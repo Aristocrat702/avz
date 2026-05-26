@@ -1159,3 +1159,128 @@
 2026-05-27 03:29:39,952 [INFO] Authentication (password) successful!
 2026-05-27 03:29:40,357 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
 2026-05-27 03:29:40,657 [INFO] Authentication (password) successful!
+2026-05-27 03:31:21,925 [INFO] Вкладка Атаки v4.0 инициализирована
+2026-05-27 03:31:21,987 [INFO] AVZ-Aristo v27.0 GUI запущен
+2026-05-27 03:31:41,813 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:31:42,089 [INFO] Authentication (password) successful!
+2026-05-27 03:32:10,592 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:32:11,037 [INFO] Authentication (password) successful!
+2026-05-27 03:32:36,713 [ERROR] Exception (client): Error reading SSH protocol banner
+2026-05-27 03:32:36,715 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:36,716 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2213, in _check_banner
+2026-05-27 03:32:36,716 [ERROR]     buf = self.packetizer.readline(timeout)
+2026-05-27 03:32:36,716 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 395, in readline
+2026-05-27 03:32:36,716 [ERROR]     buf += self._read_timeout(timeout)
+2026-05-27 03:32:36,716 [ERROR]            ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+2026-05-27 03:32:36,716 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 673, in _read_timeout
+2026-05-27 03:32:36,716 [ERROR]     raise socket.timeout()
+2026-05-27 03:32:36,716 [ERROR] TimeoutError
+2026-05-27 03:32:36,716 [ERROR] 
+2026-05-27 03:32:36,716 [ERROR] During handling of the above exception, another exception occurred:
+2026-05-27 03:32:36,716 [ERROR] 
+2026-05-27 03:32:36,716 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:36,716 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2029, in run
+2026-05-27 03:32:36,716 [ERROR]     self._check_banner()
+2026-05-27 03:32:36,716 [ERROR]     ~~~~~~~~~~~~~~~~~~^^
+2026-05-27 03:32:36,716 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2217, in _check_banner
+2026-05-27 03:32:36,716 [ERROR]     raise SSHException(
+2026-05-27 03:32:36,716 [ERROR]         "Error reading SSH protocol banner" + str(e)
+2026-05-27 03:32:36,716 [ERROR]     )
+2026-05-27 03:32:36,716 [ERROR] paramiko.ssh_exception.SSHException: Error reading SSH protocol banner
+2026-05-27 03:32:36,716 [ERROR] 
+2026-05-27 03:32:47,853 [ERROR] Exception (client): Error reading SSH protocol banner
+2026-05-27 03:32:47,856 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:47,857 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2213, in _check_banner
+2026-05-27 03:32:47,857 [ERROR]     buf = self.packetizer.readline(timeout)
+2026-05-27 03:32:47,857 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 395, in readline
+2026-05-27 03:32:47,857 [ERROR]     buf += self._read_timeout(timeout)
+2026-05-27 03:32:47,857 [ERROR]            ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+2026-05-27 03:32:47,857 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 673, in _read_timeout
+2026-05-27 03:32:47,857 [ERROR]     raise socket.timeout()
+2026-05-27 03:32:47,857 [ERROR] TimeoutError
+2026-05-27 03:32:47,857 [ERROR] 
+2026-05-27 03:32:47,858 [ERROR] During handling of the above exception, another exception occurred:
+2026-05-27 03:32:47,858 [ERROR] 
+2026-05-27 03:32:47,858 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:47,858 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2029, in run
+2026-05-27 03:32:47,858 [ERROR]     self._check_banner()
+2026-05-27 03:32:47,858 [ERROR]     ~~~~~~~~~~~~~~~~~~^^
+2026-05-27 03:32:47,858 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2217, in _check_banner
+2026-05-27 03:32:47,858 [ERROR]     raise SSHException(
+2026-05-27 03:32:47,858 [ERROR]         "Error reading SSH protocol banner" + str(e)
+2026-05-27 03:32:47,858 [ERROR]     )
+2026-05-27 03:32:47,858 [ERROR] paramiko.ssh_exception.SSHException: Error reading SSH protocol banner
+2026-05-27 03:32:47,858 [ERROR] 
+2026-05-27 03:32:58,981 [ERROR] Exception (client): Error reading SSH protocol banner
+2026-05-27 03:32:58,984 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:58,985 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2213, in _check_banner
+2026-05-27 03:32:58,985 [ERROR]     buf = self.packetizer.readline(timeout)
+2026-05-27 03:32:58,985 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 395, in readline
+2026-05-27 03:32:58,985 [ERROR]     buf += self._read_timeout(timeout)
+2026-05-27 03:32:58,985 [ERROR]            ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+2026-05-27 03:32:58,986 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 673, in _read_timeout
+2026-05-27 03:32:58,986 [ERROR]     raise socket.timeout()
+2026-05-27 03:32:58,986 [ERROR] TimeoutError
+2026-05-27 03:32:58,986 [ERROR] 
+2026-05-27 03:32:58,986 [ERROR] During handling of the above exception, another exception occurred:
+2026-05-27 03:32:58,986 [ERROR] 
+2026-05-27 03:32:58,986 [ERROR] Traceback (most recent call last):
+2026-05-27 03:32:58,986 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2029, in run
+2026-05-27 03:32:58,986 [ERROR]     self._check_banner()
+2026-05-27 03:32:58,986 [ERROR]     ~~~~~~~~~~~~~~~~~~^^
+2026-05-27 03:32:58,986 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2217, in _check_banner
+2026-05-27 03:32:58,986 [ERROR]     raise SSHException(
+2026-05-27 03:32:58,986 [ERROR]         "Error reading SSH protocol banner" + str(e)
+2026-05-27 03:32:58,986 [ERROR]     )
+2026-05-27 03:32:58,986 [ERROR] paramiko.ssh_exception.SSHException: Error reading SSH protocol banner
+2026-05-27 03:32:58,986 [ERROR] 
+2026-05-27 03:33:12,237 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:12,695 [INFO] Authentication (password) successful!
+2026-05-27 03:33:13,315 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:13,590 [INFO] Authentication (password) successful!
+2026-05-27 03:33:13,964 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:14,237 [INFO] Authentication (password) successful!
+2026-05-27 03:33:15,219 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:15,472 [INFO] Authentication (password) successful!
+2026-05-27 03:33:16,911 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:17,182 [INFO] Authentication (password) successful!
+2026-05-27 03:33:18,029 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:18,280 [INFO] Authentication (password) successful!
+2026-05-27 03:33:19,662 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:19,937 [INFO] Authentication (password) successful!
+2026-05-27 03:33:21,323 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:21,624 [INFO] Authentication (password) successful!
+2026-05-27 03:33:22,189 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:22,658 [INFO] Authentication (password) successful!
+2026-05-27 03:33:24,485 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:24,778 [INFO] Authentication (password) successful!
+2026-05-27 03:33:25,178 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:25,433 [INFO] Authentication (password) successful!
+2026-05-27 03:33:25,770 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:26,091 [INFO] Authentication (password) successful!
+2026-05-27 03:33:27,443 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:27,697 [INFO] Authentication (password) successful!
+2026-05-27 03:33:28,242 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:28,537 [INFO] Authentication (password) successful!
+2026-05-27 03:33:54,789 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:33:55,189 [INFO] Authentication (password) successful!
+2026-05-27 03:34:06,311 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:06,610 [INFO] Authentication (password) successful!
+2026-05-27 03:34:10,178 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:10,429 [INFO] Authentication (password) successful!
+2026-05-27 03:34:15,357 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:15,633 [INFO] Authentication (password) successful!
+2026-05-27 03:34:16,285 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:16,570 [INFO] Authentication (password) successful!
+2026-05-27 03:34:17,674 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:19,263 [INFO] Authentication (password) successful!
+2026-05-27 03:34:19,849 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:20,171 [INFO] Authentication (password) successful!
+2026-05-27 03:34:21,502 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:21,782 [INFO] Authentication (password) successful!
+2026-05-27 03:34:22,987 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:23,270 [INFO] Authentication (password) successful!
+2026-05-27 03:34:23,678 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:24,008 [INFO] Authentication (password) successful!
+2026-05-27 03:34:43,895 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 03:34:44,166 [INFO] Authentication (password) successful!
