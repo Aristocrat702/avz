@@ -471,3 +471,40 @@
 2026-05-27 01:41:16,018 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
 2026-05-27 01:41:16,321 [INFO] Authentication (password) successful!
 2026-05-27 01:41:32,460 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 01:54:42,586 [INFO] Вкладка Атаки v4.0 инициализирована
+2026-05-27 01:54:42,646 [INFO] AVZ-Aristo v26.4 GUI запущен
+2026-05-27 01:55:05,887 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 01:55:08,969 [INFO] Authentication (password) successful!
+2026-05-27 01:55:16,606 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 01:55:16,914 [INFO] Authentication (password) successful!
+2026-05-27 01:56:29,130 [ERROR] Exception (client): Error reading SSH protocol banner
+2026-05-27 01:56:29,135 [ERROR] Traceback (most recent call last):
+2026-05-27 01:56:29,135 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2213, in _check_banner
+2026-05-27 01:56:29,135 [ERROR]     buf = self.packetizer.readline(timeout)
+2026-05-27 01:56:29,135 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 395, in readline
+2026-05-27 01:56:29,135 [ERROR]     buf += self._read_timeout(timeout)
+2026-05-27 01:56:29,135 [ERROR]            ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+2026-05-27 01:56:29,136 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\packet.py", line 673, in _read_timeout
+2026-05-27 01:56:29,136 [ERROR]     raise socket.timeout()
+2026-05-27 01:56:29,136 [ERROR] TimeoutError
+2026-05-27 01:56:29,136 [ERROR] 
+2026-05-27 01:56:29,136 [ERROR] During handling of the above exception, another exception occurred:
+2026-05-27 01:56:29,136 [ERROR] 
+2026-05-27 01:56:29,136 [ERROR] Traceback (most recent call last):
+2026-05-27 01:56:29,136 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2029, in run
+2026-05-27 01:56:29,136 [ERROR]     self._check_banner()
+2026-05-27 01:56:29,136 [ERROR]     ~~~~~~~~~~~~~~~~~~^^
+2026-05-27 01:56:29,136 [ERROR]   File "D:\Users\ARISTOCRAT\AppData\Local\Programs\Python\Python314\Lib\site-packages\paramiko\transport.py", line 2217, in _check_banner
+2026-05-27 01:56:29,136 [ERROR]     raise SSHException(
+2026-05-27 01:56:29,136 [ERROR]         "Error reading SSH protocol banner" + str(e)
+2026-05-27 01:56:29,136 [ERROR]     )
+2026-05-27 01:56:29,136 [ERROR] paramiko.ssh_exception.SSHException: Error reading SSH protocol banner
+2026-05-27 01:56:29,136 [ERROR] 
+2026-05-27 01:59:47,869 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 01:59:48,180 [INFO] Authentication (password) successful!
+2026-05-27 01:59:48,791 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 01:59:49,064 [INFO] Authentication (password) successful!
+2026-05-27 02:02:00,174 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 02:02:00,591 [INFO] Authentication (password) successful!
+2026-05-27 02:02:01,073 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 02:02:01,405 [INFO] Authentication (password) successful!

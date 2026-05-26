@@ -37,14 +37,20 @@ class DiagnosticTab(ttk.Frame):
         return self.vps_pass is not None
 
     def _ssh_exec(self, cmd):
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(self.vps_host, username=self.vps_user, password=self.vps_pass, timeout=10)
-        stdin, stdout, stderr = client.exec_command(cmd)
-        out = stdout.read().decode(errors='replace')
-        err = stderr.read().decode(errors='replace')
-        client.close()
-        return out, err
+        for attempt in range(3):
+            try:
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.vps_host, username=self.vps_user, password=self.vps_pass, timeout=10, banner_timeout=10)
+                stdin, stdout, stderr = client.exec_command(cmd)
+                out = stdout.read().decode(errors='replace')
+                err = stderr.read().decode(errors='replace')
+                client.close()
+                return out, err
+            except Exception as e:
+                if attempt == 2:
+                    raise e
+                time.sleep(1)
 
     def run_diag(self):
         if not self._ensure_pass(): return
@@ -294,9 +300,12 @@ class {class_name}(ttk.Frame):
         self.log.delete(1.0, tk.END)
         self.log.insert(tk.END, "[*] Получение лога спредера и статуса...\n")
         def task():
-            out, _ = self._ssh_exec("cat /root/c2/spreader.log 2>/dev/null | tail -30")
-            self.log.insert(tk.END, "--- spreader.log ---\n" + (out if out else "файл пуст или отсутствует\n"))
-            out, _ = self._ssh_exec("systemctl status avz-spreader --no-pager 2>&1 | head -20")
-            self.log.insert(tk.END, "--- Статус сервиса ---\n" + out)
-            self.log.see(tk.END)
+            try:
+                out, _ = self._ssh_exec("cat /root/c2/spreader.log 2>/dev/null | tail -30")
+                self.log.insert(tk.END, "--- spreader.log ---\n" + (out if out else "файл пуст или отсутствует\n"))
+                out, _ = self._ssh_exec("systemctl status avz-spreader --no-pager 2>&1 | head -20")
+                self.log.insert(tk.END, "--- Статус сервиса ---\n" + out)
+                self.log.see(tk.END)
+            except Exception as e:
+                self.log.insert(tk.END, f"[!] Ошибка: {e}\n")
         threading.Thread(target=task, daemon=True).start()
