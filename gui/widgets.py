@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from utils.clipboard import enable_clipboard_copy
+import winsound  # для звуковых уведомлений (Windows)
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -32,3 +33,9 @@ class ToolTip:
 class RightClickMenu:
     def __init__(self, widget, get_text_func=None):
         enable_clipboard_copy(widget, get_text_func)
+
+def play_new_bot_sound():
+    try:
+        winsound.MessageBeep(winsound.MB_ICONINFORMATION)
+    except:
+        pass

