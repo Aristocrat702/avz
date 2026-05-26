@@ -1,8 +1,7 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, scrolledtext
 
 def enable_clipboard_copy(widget, get_text_func=None):
-    """Добавляет в виджет контекстное меню с кнопкой Копировать."""
     menu = tk.Menu(widget, tearoff=0)
     def copy_to_clipboard():
         try:
@@ -30,14 +29,12 @@ def enable_clipboard_copy(widget, get_text_func=None):
     def show_menu(event):
         menu.post(event.x_root, event.y_root)
     widget.bind('<Button-3>', show_menu)
-    # Привязка горячих клавиш
     widget.bind('<Control-c>', lambda e: copy_to_clipboard())
     widget.bind('<Control-C>', lambda e: copy_to_clipboard())
     widget.bind('<Control-v>', lambda e: paste_from_clipboard())
     widget.bind('<Control-V>', lambda e: paste_from_clipboard())
 
 def enable_global_clipboard(root):
-    """Рекурсивно добавляет копирование/вставку для всех текстовых полей, таблиц и логов."""
     def recurse(widget):
         if isinstance(widget, (tk.Text, scrolledtext.ScrolledText)):
             enable_clipboard_copy(widget, lambda: widget.selection_get() if widget.tag_ranges(tk.SEL) else widget.get(1.0, tk.END))
@@ -50,6 +47,3 @@ def enable_global_clipboard(root):
         for child in widget.winfo_children():
             recurse(child)
     recurse(root)
-
-# Импорт для scrolledtext внутри enable_global_clipboard
-from tkinter import scrolledtext

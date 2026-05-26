@@ -20,7 +20,6 @@ from utils.logger import Logger
 from utils.helpers import load_settings
 from utils.clipboard import enable_global_clipboard
 
-# Загружаем версию
 VERSION = "unknown"
 if os.path.exists("version.json"):
     with open("version.json") as f:
@@ -62,8 +61,7 @@ class App:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Список вкладок (можно расширять динамически)
-        self.tabs = {
+        tabs = {
             "Атака": AttackTab,
             "Ботнет": BotnetTab,
             "SSH-серверы": SSHTab,
@@ -79,8 +77,7 @@ class App:
             "Диагностика": DiagnosticTab,
         }
 
-        for title, TabClass in self.tabs.items():
-            # Для некоторых вкладок используется свой фрейм
+        for title, TabClass in tabs.items():
             if title == "Разведка":
                 tab = ReconTab(self.notebook, self)
                 self.notebook.add(tab.frame, text=title)

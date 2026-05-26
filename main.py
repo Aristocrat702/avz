@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
-# AVZ-Aristo RAGE – главный запускатор с автообновлением
-import sys, os, json, subprocess, threading, time
-try:
-    import requests
-except ImportError:
-    print("Установите requests: pip install requests")
-    sys.exit(1)
-import tkinter as tk
+import sys, os, json, subprocess, threading, time, requests, tkinter as tk
 from tkinter import messagebox
 from gui.app import App
 
 GITHUB_REPO = "Aristocrat702/avz"
 RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 
-# Загружаем версию
 VERSION = "unknown"
 if os.path.exists("version.json"):
     with open("version.json") as f:
