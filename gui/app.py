@@ -20,10 +20,16 @@ from utils.logger import Logger
 from utils.helpers import load_settings
 from utils.clipboard import enable_global_clipboard
 
+# Загружаем версию
+VERSION = "unknown"
+if os.path.exists("version.json"):
+    with open("version.json") as f:
+        VERSION = json.load(f).get("version", "unknown")
+
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v25.17.3 RAGE")
+        self.root.title(f"AVZ-Aristo v{VERSION} RAGE")
         self.root.geometry("1200x800")
         self.root.configure(bg="#f0f0f0")
         self.theme = 'light'
@@ -42,8 +48,7 @@ class App:
         self.proxy_manager = ProxyManager()
         self.logger = Logger()
         self._create_notebook()
-        self.logger.info("AVZ-Aristo GUI запущен")
-        # Включаем глобальный клипборд для всех виджетов
+        self.logger.info(f"AVZ-Aristo v{VERSION} GUI запущен")
         enable_global_clipboard(self.root)
 
     def _create_notebook(self):
@@ -57,44 +62,34 @@ class App:
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        self.attack_tab = AttackTab(self.notebook, self)
-        self.notebook.add(self.attack_tab, text="Атака")
+        # Список вкладок (можно расширять динамически)
+        self.tabs = {
+            "Атака": AttackTab,
+            "Ботнет": BotnetTab,
+            "SSH-серверы": SSHTab,
+            "Разведка": ReconTab,
+            "Мониторинг": MonitorTab,
+            "Настройки": SettingsTab,
+            "Справка": HelpTab,
+            "Захват": ExfilTab,
+            "Трофеи": LootTab,
+            "Прокси": ProxyTab,
+            "Telegram": TelegramTab,
+            "Автоматизация": AutoTab,
+            "Диагностика": DiagnosticTab,
+        }
 
-        self.botnet_tab = BotnetTab(self.notebook, self)
-        self.notebook.add(self.botnet_tab, text="Ботнет")
-
-        self.ssh_tab = SSHTab(self.notebook, self)
-        self.notebook.add(self.ssh_tab, text="SSH-серверы")
-
-        self.recon_tab = ReconTab(self.notebook, self)
-        self.notebook.add(self.recon_tab.frame, text="Разведка")
-
-        self.monitor_tab = MonitorTab(self.notebook, self)
-        self.notebook.add(self.monitor_tab.frame, text="Мониторинг")
-
-        self.settings_tab = SettingsTab(self.notebook, self)
-        self.notebook.add(self.settings_tab.frame, text="Настройки")
-
-        self.help_tab = HelpTab(self.notebook, self)
-        self.notebook.add(self.help_tab, text="Справка")
-
-        self.exfil_tab = ExfilTab(self.notebook, self)
-        self.notebook.add(self.exfil_tab.frame, text="Захват")
-
-        self.loot_tab = LootTab(self.notebook, self)
-        self.notebook.add(self.loot_tab.frame, text="Трофеи")
-
-        self.proxy_tab = ProxyTab(self.notebook, self)
-        self.notebook.add(self.proxy_tab.frame, text="Прокси")
-
-        self.telegram_tab = TelegramTab(self.notebook, self)
-        self.notebook.add(self.telegram_tab.frame, text="Telegram")
-
-        self.auto_tab = AutoTab(self.notebook, self)
-        self.notebook.add(self.auto_tab.frame, text="Автоматизация")
-
-        self.diag_tab = DiagnosticTab(self.notebook, self)
-        self.notebook.add(self.diag_tab, text="Диагностика")
+        for title, TabClass in self.tabs.items():
+            # Для некоторых вкладок используется свой фрейм
+            if title == "Разведка":
+                tab = ReconTab(self.notebook, self)
+                self.notebook.add(tab.frame, text=title)
+            elif title in ("Мониторинг", "Настройки", "Захват", "Трофеи", "Прокси", "Telegram", "Автоматизация"):
+                tab = TabClass(self.notebook, self)
+                self.notebook.add(tab.frame, text=title)
+            else:
+                tab = TabClass(self.notebook, self)
+                self.notebook.add(tab, text=title)
 
     def set_status(self, status_type, message):
         self.logger.info(f"Статус [{status_type}]: {message}")

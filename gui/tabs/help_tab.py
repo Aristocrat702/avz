@@ -1,19 +1,25 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext
+import json, os
 
 class HelpTab(ttk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent)
         self.app = app
-        self.create_widgets()
+        # Загружаем версию
+        version = "unknown"
+        if os.path.exists("version.json"):
+            with open("version.json") as f:
+                version = json.load(f).get("version", "unknown")
+        self.create_widgets(version)
 
-    def create_widgets(self):
+    def create_widgets(self, version):
         text = scrolledtext.ScrolledText(self, wrap=tk.WORD, bg='#ffffff', fg='#000000',
                                          font=('Consolas', 10))
         text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        content = """
+        content = f"""
 ╔══════════════════════════════════════════════════════════════╗
-║                    AVZ-Aristo RAGE v25.5.1                  ║
+║                    AVZ-Aristo RAGE v{version:<21} ║
 ╠══════════════════════════════════════════════════════════════╣
 ║ Методы атаки (вкладка "Атака"):                             ║
 ║   GET, POST, CFB, CFBUAM, RAPID, TCP, UDP, SYN_FLOOD       ║

@@ -13,6 +13,12 @@ from gui.app import App
 GITHUB_REPO = "Aristocrat702/avz"
 RAW_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 
+# Загружаем версию
+VERSION = "unknown"
+if os.path.exists("version.json"):
+    with open("version.json") as f:
+        VERSION = json.load(f).get("version", "unknown")
+
 def check_for_updates():
     try:
         resp = requests.get(f"https://api.github.com/repos/{GITHUB_REPO}/commits/main", timeout=5)
@@ -51,10 +57,9 @@ def update_from_github():
 
 if __name__ == "__main__":
     root = tk.Tk()
-    root.title("AVZ-Aristo v25.15 RAGE")
+    root.title(f"AVZ-Aristo v{VERSION} RAGE")
     root.geometry("1200x800")
 
-    # Проверка обновлений в фоне
     def check_and_prompt():
         if check_for_updates():
             if messagebox.askyesno("Обновление", "Доступна новая версия программы. Обновить сейчас?"):
