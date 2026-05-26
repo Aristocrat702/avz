@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, scrolledtext, messagebox
-import threading, paramiko, socket, json, time, os, sys, io
+from tkinter import ttk, scrolledtext, messagebox, simpledialog
+import threading, paramiko, socket, json, time, os, sys, io, ast, importlib, inspect
 
 class DiagnosticTab(ttk.Frame):
     def __init__(self, parent, app=None):
@@ -12,18 +12,16 @@ class DiagnosticTab(ttk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        # Кнопки управления VPS
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(btn_frame, text="Диагностика VPS", command=self.run_diag).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Автоисправление VPS", command=self.run_repair).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Проверить порт 80", command=self.check_port).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Анализ кода", command=self.run_code_analysis).pack(side=tk.LEFT, padx=2)
 
-        # Лог диагностики
         self.log = scrolledtext.ScrolledText(self, height=10, bg='white', font=('Consolas', 9))
         self.log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Python-консоль
         console_frame = ttk.LabelFrame(self, text="Python-консоль (быстрые проверки)")
         console_frame.pack(fill=tk.X, padx=5, pady=5)
         self.code_entry = tk.Text(console_frame, height=4, bg='#ffffcc', font=('Consolas', 10))
@@ -31,9 +29,10 @@ class DiagnosticTab(ttk.Frame):
         self.code_entry.insert(tk.END, "s = socket.socket(); s.settimeout(3); s.connect(('80.249.146.202',80)); s.sendall(b'list'); print(s.recv(4096).decode())")
         ttk.Button(console_frame, text="Выполнить код", command=self.exec_python).pack(pady=2)
 
+    # ------------------- VPS диагностика -------------------
     def _ensure_pass(self):
         if not self.vps_pass:
-            self.vps_pass = tk.simpledialog.askstring("VPS пароль", f"Пароль для root@{self.vps_host}:", show='*')
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Пароль для root@{self.vps_host}:", show='*')
         return self.vps_pass is not None
 
     def _ssh_exec(self, cmd):
@@ -154,3 +153,88 @@ WantedBy=multi-user.target
                 sys.stdout = old_stdout
             self.log.see(tk.END)
         threading.Thread(target=task, daemon=True).start()
+
+    # ------------------- АНАЛИЗ КОДА -------------------
+    def run_code_analysis(self):
+        self.log.delete(1.0, tk.END)
+        self.log.insert(tk.END, "[*] Анализ локального кода...\n")
+        def task():
+            errors = []
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            for root, dirs, files in os.walk(project_root):
+                for f in files:
+                    if f.endswith('.py'):
+                        path = os.path.join(root, f)
+                        self._analyze_file(path, errors)
+            if errors:
+                for err in errors:
+                    self.log.insert(tk.END, f"{err}\n")
+            else:
+                self.log.insert(tk.END, "[+] Ошибок не найдено\n")
+            self.log.see(tk.END)
+        threading.Thread(target=task, daemon=True).start()
+
+    def _analyze_file(self, path, errors):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                source = f.read()
+        except:
+            errors.append(f"[!] Не удалось прочитать {path}")
+            return
+        # Синтаксис
+        try:
+            tree = ast.parse(source, filename=path)
+        except SyntaxError as e:
+            errors.append(f"[SYNTAX] {path}: строка {e.lineno}: {e.msg}")
+            return
+
+        # Сбор информации о классах tkinter
+        classes = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                # Проверяем, наследуется ли от tkinter (упрощённо)
+                bases = [ast.dump(b) for b in node.bases]
+                if any('tk.Frame' in b or 'ttk.Frame' in b for b in bases):
+                    methods = [n.name for n in node.body if isinstance(n, ast.FunctionDef)]
+                    classes[node.name] = {'methods': set(methods), 'commands': set()}
+                    # Ищем вызовы command=self.xxx внутри create_widgets
+                    for method in node.body:
+                        if isinstance(method, ast.FunctionDef) and method.name == 'create_widgets':
+                            for subnode in ast.walk(method):
+                                if isinstance(subnode, ast.Call) and hasattr(subnode.func, 'value'):
+                                    # Упрощённо ищем command=self.xxx
+                                    if isinstance(subnode.func.value, ast.Name) and subnode.func.value.id == 'self':
+                                        if hasattr(subnode, 'keywords'):
+                                            for kw in subnode.keywords:
+                                                if kw.arg == 'command' and isinstance(kw.value, ast.Attribute) and isinstance(kw.value.value, ast.Name) and kw.value.value.id == 'self':
+                                                    classes[node.name]['commands'].add(kw.value.attr)
+
+        # Проверка пропущенных методов
+        for cls_name, info in classes.items():
+            missing = info['commands'] - info['methods']
+            for m in missing:
+                errors.append(f"[MISSING] {cls_name} в {path}: кнопка ссылается на self.{m}, но метод отсутствует")
+            # Пустые методы
+            for method in info['methods']:
+                for node in ast.walk(tree):
+                    if isinstance(node, ast.FunctionDef) and node.name == method:
+                        if len(node.body) == 1 and isinstance(node.body[0], ast.Pass):
+                            errors.append(f"[EMPTY] {cls_name}.{method} в {path}: только pass")
+
+        # Неиспользуемые импорты (простая проверка)
+        imports = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.append(alias.name)
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    imports.append(alias.name)
+        # Грубая проверка: ищем имена в остальном коде
+        source_without_imports = source
+        for imp in imports:
+            count = source_without_imports.count(imp)
+            if count <= 1:  # только в строке импорта
+                errors.append(f"[UNUSED] {path}: импорт '{imp}' возможно не используется")
+
+    # -----------------------------------------------------
