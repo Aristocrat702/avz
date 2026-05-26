@@ -14,6 +14,7 @@ from gui.tabs.proxy_tab import ProxyTab
 from gui.tabs.telegram_tab import TelegramTab
 from gui.tabs.auto_tab import AutoTab
 from gui.tabs.diagnostic_tab import DiagnosticTab
+from gui.tabs.stats_tab import StatsTab
 from utils.toast import Toast
 from engine.proxy import ProxyManager
 from utils.logger import Logger
@@ -67,6 +68,7 @@ class App:
             "SSH-серверы": SSHTab,
             "Разведка": ReconTab,
             "Мониторинг": MonitorTab,
+            "Статистика": StatsTab,
             "Настройки": SettingsTab,
             "Справка": HelpTab,
             "Захват": ExfilTab,

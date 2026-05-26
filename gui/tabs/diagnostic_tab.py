@@ -62,7 +62,7 @@ class DiagnosticTab(ttk.Frame):
                 self.log.insert(tk.END, "--- Порты ---\n" + out + ("\n" if out else "порты не найдены\n"))
                 out, err = self._ssh_exec("ps aux | grep -E 'c2.py|spreader.py' | grep -v grep")
                 self.log.insert(tk.END, "--- Процессы ---\n" + (out if out else "нет процессов\n"))
-                deps = ['aiohttp','paramiko','redis','docker','asyncssh','sshpass','impacket','pywinrm','vncdotool','pymongo','cassandra']
+                deps = ['aiohttp','paramiko','redis','docker','asyncssh','sshpass','impacket','pywinrm','vncdotool','pymongo','cassandra','hydra']
                 for dep in deps:
                     out, _ = self._ssh_exec(f"which {dep} 2>/dev/null || python3 -c 'import {dep}' 2>&1")
                     self.log.insert(tk.END, f"{dep}: {'OK' if 'not found' not in out and 'Error' not in out else 'НЕТ'}\n")
@@ -82,7 +82,7 @@ class DiagnosticTab(ttk.Frame):
                 self.log.insert(tk.END, "[*] Установка зависимостей...\n")
                 cmds = [
                     "apt update -y",
-                    "apt install -y sshpass masscan freerdp2-x11 hydra",
+                    "apt install -y sshpass masscan freerdp2-x11 hydra nmap",
                     "pip3 install aiohttp paramiko redis docker asyncssh shodan impacket pywinrm vncdotool pymongo cassandra-driver mysql-connector-python pymssql psycopg2-binary",
                 ]
                 for cmd in cmds:
