@@ -13,6 +13,7 @@ from gui.tabs.loot_tab import LootTab
 from gui.tabs.proxy_tab import ProxyTab
 from gui.tabs.telegram_tab import TelegramTab
 from gui.tabs.auto_tab import AutoTab
+from gui.tabs.diagnostic_tab import DiagnosticTab
 from utils.toast import Toast
 from engine.proxy import ProxyManager
 from utils.logger import Logger
@@ -21,7 +22,7 @@ from utils.helpers import load_settings
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v25.5.1 RAGE")
+        self.root.title("AVZ-Aristo v25.16 RAGE")
         self.root.geometry("1200x800")
         self.root.configure(bg="#f0f0f0")
         self.theme = 'light'
@@ -88,6 +89,9 @@ class App:
 
         self.auto_tab = AutoTab(self.notebook, self)
         self.notebook.add(self.auto_tab.frame, text="Автоматизация")
+
+        self.diag_tab = DiagnosticTab(self.notebook, self)
+        self.notebook.add(self.diag_tab, text="Диагностика")
 
     def set_status(self, status_type, message):
         self.logger.info(f"Статус [{status_type}]: {message}")
