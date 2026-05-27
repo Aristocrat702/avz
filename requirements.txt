@@ -14,3 +14,7 @@ stem
 folium
 pyscreenshot
 Pillow
+websocket-client
+python-nmap
+matplotlib
+croniter

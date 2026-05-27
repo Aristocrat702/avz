@@ -4,5 +4,7 @@
   "use_tor": true,
   "tor_socks_port": 9050,
   "spyderproxy_url": "3kBTM0Ya1FXxA7k:9e3c9b9c-1a11-4022-ad68-111eac0e7e21@budget.spyderproxy.com:11000",
-  "kill_switch_token": "default_kill"
+  "kill_switch_token": "default_kill",
+  "telegram_token": "",
+  "telegram_chat_id": ""
 }

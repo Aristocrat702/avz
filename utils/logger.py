@@ -1,15 +1,47 @@
 import logging
 import sys
 
-# Простая функция логирования, которую ожидают все модули
+# ---------- Класс Logger (используется GUI и старыми модулями) ----------
+class Logger:
+    def __init__(self, name=__name__):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.INFO)
+        if not self.logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
+            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            # Пишем также в файл
+            fh = logging.FileHandler('avz.log')
+            fh.setFormatter(formatter)
+            self.logger.addHandler(fh)
+
+    def info(self, message):
+        self.logger.info(message)
+
+    def warning(self, message):
+        self.logger.warning(message)
+
+    def error(self, message):
+        self.logger.error(message)
+
+    def debug(self, message):
+        self.logger.debug(message)
+
+
+# ---------- Глобальная функция log (используется новыми модулями) ----------
 def log(message: str):
-    """Запись сообщения в лог-файл avz.log и вывод на консоль."""
+    """Простая функция логирования, которую ожидают spreader, c2 и т.д."""
     logging.info(message)
     print(message)
 
-# Настройка логирования один раз при импорте
+
+# Настройка корневого логгера, чтобы функция log работала
 logging.basicConfig(
-    filename='avz.log',
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('avz.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
 )
