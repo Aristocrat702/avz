@@ -31,3 +31,7 @@ rich
 sqlmap
 kademlia
 rpcudp
+pyperclip
+SpeechRecognition
+pydub
+paramiko

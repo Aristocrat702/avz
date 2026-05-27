@@ -17,9 +17,8 @@ class ToolTip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         label = tk.Label(tw, text=self.text, justify=tk.LEFT,
-                         background="#ffffff", foreground="#000000",
-                         relief=tk.SOLID, borderwidth=1,
-                         font=("Segoe UI", 8, "normal"))
+                         background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+                         font=("Arial", 9, "normal"))
         label.pack()
 
     def hide_tip(self, event=None):

