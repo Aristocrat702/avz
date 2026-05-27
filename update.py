@@ -5,7 +5,6 @@ import sys
 import subprocess
 
 MANIFEST_FILE = "manifest.json"
-# Файлы, которые нельзя перезаписывать при обновлении
 PROTECTED_FILES = {
     "bots.json",
     "attack_history.db",
@@ -30,7 +29,6 @@ def apply_manifest():
         path = entry["path"]
         content = entry["content"]
 
-        # Пропускаем защищённые файлы
         if path in PROTECTED_FILES:
             print(f"[✓] Пропущен защищённый файл: {path}")
             continue
@@ -43,14 +41,11 @@ def apply_manifest():
             f.write(content)
         print(f"[+] Обновлён: {path}")
 
-    # Установка зависимостей
     if os.path.exists("requirements.txt"):
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
         print("[+] Зависимости установлены")
 
-    # Удаляем манифест после применения
-    os.remove(MANIFEST_FILE)
-    print("[✓] Обновление завершено. Удали манифест и перезапусти программу.")
+    print("[✓] Обновление завершено (manifest.json сохранён).")
 
 if __name__ == "__main__":
     apply_manifest()
