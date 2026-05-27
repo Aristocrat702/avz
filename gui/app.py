@@ -26,13 +26,14 @@ import json
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v40.0 // LEGION")
+        self.root.title("AVZ-Aristo v43.0 // GLOBAL DOMINATION")
         self.root.minsize(1100, 700)
         self.root.geometry("1280x800")
         self.logger = Logger(__name__)
         self.toast = ToastManager(root)
         
-        # Загружаем сохранённую тему или используем по умолчанию
+        root.app = self
+        
         self.settings = {}
         try:
             with open("avz_settings.json","r") as f:
@@ -43,7 +44,6 @@ class App:
         self.current_theme = THEMES.get(theme_name, THEMES["cyber_light"])
         apply_theme(root, self.current_theme)
         
-        # Верхняя панель
         header = tk.Frame(root, bg=self.current_theme['accent'], height=40)
         header.pack(fill=tk.X, side=tk.TOP)
         header_label = tk.Label(header, text="AVZ-ARISTO", font=('Segoe UI', 14, 'bold'),
@@ -54,7 +54,7 @@ class App:
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self._create_notebook()
         
-        self.toast.show("AVZ-Aristo v40.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v43.0 запущен", duration=2000)
 
     def _create_notebook(self):
         tabs = [

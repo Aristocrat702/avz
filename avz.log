@@ -2996,3 +2996,6 @@ ConnectionResetError: [WinError 10054] Удаленный хост принудительно разорвал сущ
 2026-05-28 01:55:01,084 - INFO - Using categorical units to plot a list of strings that are all parsable as floats or dates. If these strings should be plotted as numbers, cast to the appropriate data type before plotting.
 2026-05-28 01:55:02,090 - INFO - Using categorical units to plot a list of strings that are all parsable as floats or dates. If these strings should be plotted as numbers, cast to the appropriate data type before plotting.
 2026-05-28 01:55:02,091 - INFO - Using categorical units to plot a list of strings that are all parsable as floats or dates. If these strings should be plotted as numbers, cast to the appropriate data type before plotting.
+2026-05-28 02:14:12,899 - INFO - [Proxy] Используется резервный Spyderproxy.
+2026-05-28 02:14:12,971 - INFO - [Proxy] Используется резервный Spyderproxy.
+2026-05-28 02:14:12,978 - INFO - [Proxy] Используется резервный Spyderproxy.

@@ -1,19 +1,31 @@
-import socks
-import socket
-import random
-import json
-import os
-import asyncio
-import aiohttp
+import socks, socket, random, json, os, asyncio, aiohttp, time, threading, re
 from bs4 import BeautifulSoup
 from utils.logger import log
+
+DEFAULT_SOURCES = [
+    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
+    "https://www.proxy-list.download/api/v1/get?type=http",
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+    "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
+    "https://sunny9577.github.io/proxy-scraper/proxies.txt",
+    "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies.txt",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
+    "https://raw.githubusercontent.com/UserR3X/proxy-list/main/online/http.txt",
+    "https://raw.githubusercontent.com/UserR3X/proxy-list/main/online/socks4.txt",
+    "https://raw.githubusercontent.com/UserR3X/proxy-list/main/online/socks5.txt",
+    "https://spys.me/proxy.txt"
+]
 
 class ProxyCollector:
     def __init__(self, sources=None):
         if sources is None:
-            with open("avz_settings.json", "r") as f:
-                settings = json.load(f)
-            self.sources = settings.get("proxy_sources", [])
+            try:
+                with open("avz_settings.json", "r") as f:
+                    settings = json.load(f)
+                self.sources = settings.get("proxy_sources", DEFAULT_SOURCES)
+            except:
+                self.sources = DEFAULT_SOURCES
         else:
             self.sources = sources
 
@@ -21,44 +33,38 @@ class ProxyCollector:
         proxies = []
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=15) as resp:
+                async with session.get(url, timeout=20) as resp:
                     text = await resp.text()
-                    # Простой парсинг: ищем ip:port в тексте
-                    import re
                     matches = re.findall(r'\d+\.\d+\.\d+\.\d+:\d+', text)
                     proxies.extend(matches)
         except Exception as e:
-            log(f"[ProxyCollector] Ошибка при загрузке {url}: {e}")
+            log(f"[ProxyCollector] Ошибка {url}: {e}", 'warning')
         return proxies
 
     async def check_proxy(self, proxy_str, test_url="http://httpbin.org/ip"):
         try:
-            proxy_parts = proxy_str.split(':')
-            if len(proxy_parts) != 2:
-                return False
-            ip, port = proxy_parts
+            ip, port = proxy_str.split(':')
             real_url = f"http://{ip}:{port}"
             async with aiohttp.ClientSession() as session:
-                async with session.get(test_url, proxy=real_url, timeout=5) as resp:
+                async with session.get(test_url, proxy=real_url, timeout=8) as resp:
                     if resp.status == 200:
-                        return True
+                        return {"url": real_url, "type": "http", "latency": 0}
         except:
             pass
-        return False
+        return None
 
-    async def collect_and_check(self, max_workers=200):
+    async def collect_and_check(self, max_workers=1000):
         all_proxies = []
         tasks = [self.fetch_list(src) for src in self.sources]
         results = await asyncio.gather(*tasks)
         for lst in results:
             all_proxies.extend(lst)
-        # Убираем дубликаты
         all_proxies = list(set(all_proxies))
-        log(f"[ProxyCollector] Всего найдено {len(all_proxies)} прокси, начинаю проверку...")
+        log(f"[ProxyCollector] Собрано {len(all_proxies)} кандидатов, проверяю...")
         sem = asyncio.Semaphore(max_workers)
         async def check(p):
             async with sem:
-                return p if await self.check_proxy(p) else None
+                return await self.check_proxy(p)
         check_tasks = [check(p) for p in all_proxies]
         live = await asyncio.gather(*check_tasks)
         live = [p for p in live if p is not None]
@@ -69,7 +75,10 @@ class ProxyManager:
     def __init__(self):
         self.proxies = []
         self.current_index = 0
+        self.refresh_interval = 600
         self.load_proxies()
+        self.auto_refresh_thread = threading.Thread(target=self._auto_refresh_worker, daemon=True)
+        self.auto_refresh_thread.start()
 
     def load_proxies(self):
         if os.path.exists("proxy_list.json"):
@@ -79,15 +88,11 @@ class ProxyManager:
                 log(f"[Proxy] Загружено {len(self.proxies)} прокси из файла.")
                 return
             except Exception as e:
-                log(f"[Proxy] Ошибка загрузки proxy_list.json: {e}")
-        # Если файла нет, загружаем Spyderproxy как запасной
+                log(f"[Proxy] Ошибка загрузки: {e}")
         self.proxies = [
-            {
-                "url": "socks5://3kBTM0Ya1FXxA7k:9e3c9b9c-1a11-4022-ad68-111eac0e7e21@budget.spyderproxy.com:11000",
-                "type": "socks5"
-            }
+            {"url": "socks5://3kBTM0Ya1FXxA7k:9e3c9b9c-1a11-4022-ad68-111eac0e7e21@budget.spyderproxy.com:11000", "type": "socks5"}
         ]
-        log("[Proxy] Загружен стандартный Spyderproxy.")
+        log("[Proxy] Используется резервный Spyderproxy.")
 
     def get_proxy(self):
         if not self.proxies:
@@ -104,12 +109,15 @@ class ProxyManager:
     async def refresh_proxies(self):
         collector = ProxyCollector()
         live = await collector.collect_and_check()
-        # Преобразуем в формат {'url': 'http://...', 'type': 'http'}
-        new_list = []
-        for p in live:
-            new_list.append({"url": f"http://{p}", "type": "http"})
-        # Сохраняем
         with open("proxy_list.json", "w") as f:
-            json.dump(new_list, f)
-        self.proxies = new_list
-        log(f"[Proxy] Обновлено {len(new_list)} живых прокси.")
+            json.dump(live, f, indent=2)
+        self.proxies = live
+        log(f"[Proxy] Обновлено {len(live)} прокси.")
+
+    def _auto_refresh_worker(self):
+        while True:
+            time.sleep(self.refresh_interval)
+            try:
+                asyncio.run(self.refresh_proxies())
+            except Exception as e:
+                log(f"[Proxy] Ошибка автообновления: {e}")

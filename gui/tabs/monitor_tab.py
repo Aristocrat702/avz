@@ -3,7 +3,8 @@ from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from engine.attack import stats
-import asyncio, threading, time, math
+import asyncio, threading, time, queue, warnings
+warnings.filterwarnings('ignore')
 
 class MonitorTab(tk.Frame):
     def __init__(self, parent):
@@ -13,7 +14,6 @@ class MonitorTab(tk.Frame):
         self.canvas = FigureCanvasTkAgg(self.fig, self)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Таблица активных атак
         columns = ("ID", "Цель", "Метод", "Осталось (с)")
         self.tree = ttk.Treeview(self, columns=columns, show="headings", height=6)
         for col in columns:
@@ -23,9 +23,21 @@ class MonitorTab(tk.Frame):
 
         self.mbps_data = []
         self.times = []
+        self.queue = queue.Queue()
         self.running = True
         self.update_thread = threading.Thread(target=self.update_loop, daemon=True)
         self.update_thread.start()
+        self.process_queue()
+
+    def process_queue(self):
+        try:
+            while True:
+                mbps, active = self.queue.get_nowait()
+                self.update_gui(mbps, active)
+        except queue.Empty:
+            pass
+        if self.running:
+            self.after(100, self.process_queue)
 
     def update_loop(self):
         loop = asyncio.new_event_loop()
@@ -33,12 +45,12 @@ class MonitorTab(tk.Frame):
         while self.running:
             mbps, active = loop.run_until_complete(stats.get_stats())
             self.mbps_data.append(mbps)
-            self.times.append(time.strftime('%H:%M:%S'))
+            # Используем числовой индекс для оси X
+            self.times.append(len(self.times))  # просто счётчик
             if len(self.mbps_data) > 60:
                 self.mbps_data.pop(0)
                 self.times.pop(0)
-            # Обновляем график и таблицу в главном потоке
-            self.after(0, self.update_gui, mbps, active)
+            self.queue.put((mbps, active))
             time.sleep(1)
 
     def update_gui(self, mbps, active):
@@ -46,11 +58,11 @@ class MonitorTab(tk.Frame):
         if self.mbps_data:
             self.ax.plot(self.times, self.mbps_data, color='#0077ff')
             self.ax.set_title(f"Скорость атаки (Mbps) | Активных: {active}")
-            self.ax.tick_params(axis='x', rotation=45)
+            self.ax.set_xlabel("Время (с)")
+            self.ax.set_ylabel("Mbps")
             self.fig.tight_layout()
             self.canvas.draw()
 
-        # Обновляем таблицу
         for row in self.tree.get_children():
             self.tree.delete(row)
         tasks = stats.get_tasks()
@@ -63,3 +75,7 @@ class MonitorTab(tk.Frame):
                 task['method'],
                 f"{int(remaining)}с"
             ))
+
+    def destroy(self):
+        self.running = False
+        super().destroy()

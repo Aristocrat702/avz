@@ -39,3 +39,14 @@ paramiko
 beautifulsoup4
 playwright
 keyboard
+pynput
+aiosqlite
+aioquic
+python-digitalocean
+linode_api4
+vultr
+tkinterdnd2
+geoip2
+maxminddb-geolite2
+requests[socks]
+PySocks
