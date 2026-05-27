@@ -1414,3 +1414,151 @@
 2026-05-27 03:41:24,117 [INFO] Authentication (password) successful!
 2026-05-27 03:41:24,411 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
 2026-05-27 03:41:24,645 [INFO] Authentication (password) successful!
+2026-05-27 04:00:42,235 [INFO] Вкладка Атаки v4.0 инициализирована
+2026-05-27 04:00:42,304 [INFO] AVZ-Aristo v29.0 GUI запущен
+2026-05-27 04:01:22,994 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:23,299 [INFO] Authentication (password) successful!
+2026-05-27 04:01:23,619 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:23,891 [INFO] Authentication (password) successful!
+2026-05-27 04:01:24,214 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:24,494 [INFO] Authentication (password) successful!
+2026-05-27 04:01:25,128 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:25,380 [INFO] Authentication (password) successful!
+2026-05-27 04:01:26,007 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:26,294 [INFO] Authentication (password) successful!
+2026-05-27 04:01:26,829 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:27,097 [INFO] Authentication (password) successful!
+2026-05-27 04:01:27,813 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:28,089 [INFO] Authentication (password) successful!
+2026-05-27 04:01:28,712 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:28,983 [INFO] Authentication (password) successful!
+2026-05-27 04:01:29,285 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:29,595 [INFO] Authentication (password) successful!
+2026-05-27 04:01:29,916 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:30,214 [INFO] Authentication (password) successful!
+2026-05-27 04:01:30,556 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:30,844 [INFO] Authentication (password) successful!
+2026-05-27 04:01:31,133 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:31,393 [INFO] Authentication (password) successful!
+2026-05-27 04:01:31,981 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:32,246 [INFO] Authentication (password) successful!
+2026-05-27 04:01:32,636 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:32,895 [INFO] Authentication (password) successful!
+2026-05-27 04:01:33,176 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:33,446 [INFO] Authentication (password) successful!
+2026-05-27 04:01:53,765 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:01:54,068 [INFO] Authentication (password) successful!
+2026-05-27 04:02:09,869 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 04:02:10,142 [INFO] Authentication (password) successful!
+2026-05-27 11:20:21,725 [ERROR] Socket exception: Удаленный хост принудительно разорвал существующее подключение (10054)
+2026-05-27 11:20:52,462 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:52,725 [INFO] Authentication (password) successful!
+2026-05-27 11:20:53,139 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:53,419 [INFO] Authentication (password) successful!
+2026-05-27 11:20:53,781 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:54,073 [INFO] Authentication (password) successful!
+2026-05-27 11:20:54,797 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:55,052 [INFO] Authentication (password) successful!
+2026-05-27 11:20:55,689 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:55,951 [INFO] Authentication (password) successful!
+2026-05-27 11:20:56,607 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:56,854 [INFO] Authentication (password) successful!
+2026-05-27 11:20:57,794 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:58,060 [INFO] Authentication (password) successful!
+2026-05-27 11:20:58,154 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:58,513 [INFO] Authentication (password) successful!
+2026-05-27 11:20:58,885 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:59,037 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:59,240 [INFO] Authentication (password) successful!
+2026-05-27 11:20:59,354 [INFO] Authentication (password) successful!
+2026-05-27 11:20:59,669 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:20:59,964 [INFO] Authentication (password) successful!
+2026-05-27 11:21:00,311 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:00,593 [INFO] Authentication (password) successful!
+2026-05-27 11:21:00,917 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:01,194 [INFO] Authentication (password) successful!
+2026-05-27 11:21:01,489 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:01,792 [INFO] Authentication (password) successful!
+2026-05-27 11:21:02,578 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:02,843 [INFO] Authentication (password) successful!
+2026-05-27 11:21:03,280 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:03,587 [INFO] Authentication (password) successful!
+2026-05-27 11:21:03,893 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:04,191 [INFO] Authentication (password) successful!
+2026-05-27 11:21:25,131 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 11:21:25,415 [INFO] Authentication (password) successful!
+2026-05-27 11:22:11,662 [ERROR] Socket exception: Удаленный хост принудительно разорвал существующее подключение (10054)
+2026-05-27 13:39:03,968 [INFO] Вкладка Атаки v4.0 инициализирована
+2026-05-27 13:39:05,471 [INFO] AVZ-Aristo v29.0 GUI запущен
+2026-05-27 13:39:17,566 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:17,841 [INFO] Authentication (password) successful!
+2026-05-27 13:39:18,306 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:18,599 [INFO] Authentication (password) successful!
+2026-05-27 13:39:18,942 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:19,222 [INFO] Authentication (password) successful!
+2026-05-27 13:39:20,052 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:20,314 [INFO] Authentication (password) successful!
+2026-05-27 13:39:20,929 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:21,290 [INFO] Authentication (password) successful!
+2026-05-27 13:39:22,048 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:22,399 [INFO] Authentication (password) successful!
+2026-05-27 13:39:23,436 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:23,710 [INFO] Authentication (password) successful!
+2026-05-27 13:39:24,597 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:24,864 [INFO] Authentication (password) successful!
+2026-05-27 13:39:25,152 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:25,436 [INFO] Authentication (password) successful!
+2026-05-27 13:39:25,998 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:26,269 [INFO] Authentication (password) successful!
+2026-05-27 13:39:26,753 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:27,025 [INFO] Authentication (password) successful!
+2026-05-27 13:39:27,315 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:27,592 [INFO] Authentication (password) successful!
+2026-05-27 13:39:28,385 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:28,625 [INFO] Authentication (password) successful!
+2026-05-27 13:39:29,011 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:29,335 [INFO] Authentication (password) successful!
+2026-05-27 13:39:29,675 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:39:29,990 [INFO] Authentication (password) successful!
+2026-05-27 13:40:28,446 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:40:28,721 [INFO] Authentication (password) successful!
+2026-05-27 13:40:29,051 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:40:29,360 [INFO] Authentication (password) successful!
+2026-05-27 13:41:29,833 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:41:30,114 [INFO] Authentication (password) successful!
+2026-05-27 13:46:01,606 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:46:01,907 [INFO] Authentication (password) successful!
+2026-05-27 13:46:17,501 [INFO] Вкладка Атаки v4.0 инициализирована
+2026-05-27 13:46:17,571 [INFO] AVZ-Aristo v29.0 GUI запущен
+2026-05-27 13:46:53,647 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:46:53,906 [INFO] Authentication (password) successful!
+2026-05-27 13:47:16,137 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:16,408 [INFO] Authentication (password) successful!
+2026-05-27 13:47:16,842 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:17,134 [INFO] Authentication (password) successful!
+2026-05-27 13:47:17,448 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:17,715 [INFO] Authentication (password) successful!
+2026-05-27 13:47:18,387 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:18,679 [INFO] Authentication (password) successful!
+2026-05-27 13:47:19,386 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:19,680 [INFO] Authentication (password) successful!
+2026-05-27 13:47:20,356 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:20,646 [INFO] Authentication (password) successful!
+2026-05-27 13:47:21,802 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:22,064 [INFO] Authentication (password) successful!
+2026-05-27 13:47:23,003 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:23,277 [INFO] Authentication (password) successful!
+2026-05-27 13:47:23,649 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:23,910 [INFO] Authentication (password) successful!
+2026-05-27 13:47:24,566 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:24,828 [INFO] Authentication (password) successful!
+2026-05-27 13:47:25,185 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:25,430 [INFO] Authentication (password) successful!
+2026-05-27 13:47:25,851 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:26,123 [INFO] Authentication (password) successful!
+2026-05-27 13:47:27,040 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:27,340 [INFO] Authentication (password) successful!
+2026-05-27 13:47:27,928 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:28,221 [INFO] Authentication (password) successful!
+2026-05-27 13:47:28,606 [INFO] Connected (version 2.0, client OpenSSH_8.9p1)
+2026-05-27 13:47:28,897 [INFO] Authentication (password) successful!
