@@ -1,20 +1,15 @@
 import logging
+import sys
 
-class Logger:
-    def __init__(self, log_file='avz.log'):
-        logging.basicConfig(
-            filename=log_file,
-            level=logging.INFO,
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            encoding='utf-8'
-        )
-        self.logger = logging.getLogger('AVZ')
+# Простая функция логирования, которую ожидают все модули
+def log(message: str):
+    """Запись сообщения в лог-файл avz.log и вывод на консоль."""
+    logging.info(message)
+    print(message)
 
-    def info(self, msg):
-        self.logger.info(msg)
-
-    def error(self, msg):
-        self.logger.error(msg)
-
-    def warning(self, msg):
-        self.logger.warning(msg)
+# Настройка логирования один раз при импорте
+logging.basicConfig(
+    filename='avz.log',
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
