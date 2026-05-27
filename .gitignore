@@ -1,5 +1,6 @@
 secrets.json
 AVZ_MASTER_REFERENCE.md
+bots.json
 *.log
 __pycache__/
 .idea/
