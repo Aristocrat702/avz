@@ -1,0 +1,16 @@
+aiohttp
+aiosqlite
+pyyaml
+asyncio
+colorama
+requests
+websockets
+cryptography
+pysocks
+impacket
+browser_cookie3
+pycryptodome
+stem
+folium
+pyscreenshot
+Pillow

