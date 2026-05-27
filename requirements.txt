@@ -1,4 +1,5 @@
 aiohttp
+aiohttp_socks
 aiosqlite
 pyyaml
 asyncio
@@ -35,3 +36,6 @@ pyperclip
 SpeechRecognition
 pydub
 paramiko
+beautifulsoup4
+playwright
+keyboard

