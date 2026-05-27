@@ -22,10 +22,12 @@ class AttackTab(tk.Frame):
                 "ICMP Cannon": {"method":"icmp","port":0,"duration":60},
                 "HTTP Rage": {"method":"http","port":80,"duration":120},
                 "Mixed Hell": {"method":"mixed","port":80,"duration":90},
-                "AI Swarm": {"method":"ai","port":80,"duration":120}
+                "AI Swarm": {"method":"ai","port":80,"duration":120},
+                "Multivector Burst": {"method":"multivector","port":80,"duration":120},
+                "TLS Exhaust": {"method":"tls_exhaustion","port":443,"duration":120}
             }
     def build_ui(self):
-        methods = ["udp","tcp","syn","icmp","slowloris","http","dns_amp","ntp_amp","mixed","ai"]
+        methods = ["udp","tcp","syn","icmp","slowloris","http","dns_amp","ntp_amp","mixed","ai","multivector","tls_exhaustion"]
         ttk.Label(self, text="Метод:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         self.method_var = tk.StringVar(value="syn")
         ttk.Combobox(self, textvariable=self.method_var, values=methods, state="readonly").grid(row=0, column=1)

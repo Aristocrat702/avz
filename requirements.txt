@@ -28,3 +28,6 @@ numpy
 torch
 transformers
 rich
+sqlmap
+kademlia
+rpcudp

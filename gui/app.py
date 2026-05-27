@@ -12,15 +12,16 @@ from gui.tabs.loot_tab import LootTab
 from gui.tabs.proxy_tab import ProxyTab
 from gui.tabs.telegram_tab import TelegramTab
 from gui.tabs.auto_tab import AutoTab
-from gui.tabs.diagnostic_tab import DiagnosticTab
 from gui.tabs.ai_tab import AITab
 from gui.tabs.stats_tab import StatsTab
+from gui.tabs.web_tab import WebTab
+from gui.tabs.diagnostic_tab import DiagnosticTab
 from utils.logger import Logger
 
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v30.0 ULTIMATE")
+        self.root.title("AVZ-Aristo v31.0 ULTIMATE")
         self.logger = Logger(__name__)
         style = ttk.Style()
         style.theme_use('clam')
@@ -34,6 +35,7 @@ class App:
             ("SSH", SSHTab),
             ("Разведка", ReconTab),
             ("Монитор", MonitorTab),
+            ("Взлом Веба", WebTab),
             ("Exfil", ExfilTab),
             ("Loot", LootTab),
             ("Прокси", ProxyTab),
