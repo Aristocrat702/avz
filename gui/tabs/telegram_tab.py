@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 import requests
+import json
 
 class TelegramTab(tk.Frame):
     def __init__(self, parent):
@@ -11,8 +12,6 @@ class TelegramTab(tk.Frame):
         tk.Button(self, text="Проверить связь с ботом", command=self.check).pack(pady=20)
 
     def check(self):
-        # Заглушка, но честная: проверит токен из настроек
-        import json
         try:
             with open("avz_settings.json", "r") as f:
                 s = json.load(f)

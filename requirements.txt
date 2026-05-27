@@ -18,3 +18,13 @@ websocket-client
 python-nmap
 matplotlib
 croniter
+dnspython
+python-whois
+scapy
+shodan
+plotly
+pandas
+numpy
+torch
+transformers
+rich

@@ -1,26 +1,34 @@
-import threading, time
-from datetime import datetime, timedelta
+import threading
+import asyncio
+from croniter import croniter
+from datetime import datetime
+from engine.attack import AsyncAttackEngine
 
-class AttackScheduler:
-    def __init__(self, log_func=None):
-        self.log = log_func or print
-        self.jobs = []
+class Scheduler:
+    def __init__(self):
+        self.tasks = []
+        self.engine = AsyncAttackEngine()
+        self.thread = threading.Thread(target=self._loop, daemon=True)
+        self.thread.start()
 
-    def schedule_at(self, time_str, target, method, threads, attack_callback):
-        """
-        time_str: HH:MM
-        attack_callback: функция, которая будет вызвана (без аргументов) в нужное время
-        """
-        def waiter():
+    def add_task(self, cron_expr, method, target, port, duration):
+        self.tasks.append({
+            "cron": cron_expr,
+            "method": method,
+            "target": target,
+            "port": port,
+            "duration": duration
+        })
+
+    def _loop(self):
+        while True:
             now = datetime.now()
-            target_time = datetime.strptime(time_str, "%H:%M").replace(year=now.year, month=now.month, day=now.day)
-            if target_time < now:
-                target_time += timedelta(days=1)
-            delay = (target_time - now).total_seconds()
-            self.log(f"[Расписание] Атака запланирована на {target_time.strftime('%Y-%m-%d %H:%M')} (через {int(delay)} сек)\n")
-            time.sleep(delay)
-            attack_callback()
-            self.log(f"[Расписание] Атака запущена по расписанию\n")
-        t = threading.Thread(target=waiter, daemon=True)
-        t.start()
-        self.jobs.append(t)
+            for task in self.tasks:
+                if croniter.match(task["cron"], now):
+                    asyncio.run(self.engine.run_attack(
+                        task["method"],
+                        task["target"],
+                        task["port"],
+                        task["duration"]
+                    ))
+            threading.Event().wait(30)

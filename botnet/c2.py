@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import threading
 import websockets
 import websocket
 from utils.logger import log
