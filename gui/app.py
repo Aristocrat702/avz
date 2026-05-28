@@ -22,12 +22,18 @@ from gui.themes import THEMES
 from gui.styles import apply_theme
 from utils.logger import Logger
 from utils.toast import ToastManager
-import json
+import json, os, time
+from datetime import datetime
+
+try:
+    from PIL import ImageGrab
+except ImportError:
+    import pyscreenshot as ImageGrab
 
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v55.0 // NIGHTFALL")
+        self.root.title("AVZ-Aristo v57.1 // AUTODEPLOY")
         self.root.minsize(1100, 700)
         self.root.geometry("1280x800")
         self.logger = Logger(__name__)
@@ -53,6 +59,9 @@ class App:
         
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        # Словарь для хранения вкладок
+        self.tabs = {}
         self._create_notebook()
         
         # Горячие клавиши
@@ -60,10 +69,13 @@ class App:
         root.bind('<F6>', lambda e: self._on_f6())
         root.bind('<Control-q>', lambda e: root.destroy())
         
-        self.toast.show("AVZ-Aristo v55.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v57.1 запущен", duration=2000)
+        
+        # Автоснятие скриншотов через 2 секунды после запуска
+        self.root.after(2000, self.take_all_screenshots)
 
     def _create_notebook(self):
-        tabs = [
+        tab_definitions = [
             ("Атаки", AttackTab),
             ("Конструктор пакетов", PacketTab),
             ("Ботнет", BotnetTab),
@@ -83,24 +95,58 @@ class App:
             ("Настройки", SettingsTab),
             ("Справка", HelpTab),
         ]
-        for name, TabClass in tabs:
+        for name, TabClass in tab_definitions:
             try:
                 tab = TabClass(self.notebook)
                 self.notebook.add(tab, text=name)
+                self.tabs[name] = tab
             except Exception as e:
                 self.logger.error(f"Ошибка загрузки вкладки {name}: {e}")
 
     def _on_f5(self):
-        # Найти вкладку атаки и запустить атаку
-        for tab_id in self.notebook.tabs():
-            tab = self.notebook.nametowidget(tab_id)
+        for tab in self.tabs.values():
             if isinstance(tab, AttackTab):
                 tab.start()
                 break
 
     def _on_f6(self):
-        for tab_id in self.notebook.tabs():
-            tab = self.notebook.nametowidget(tab_id)
+        for tab in self.tabs.values():
             if isinstance(tab, AttackTab):
                 tab.stop()
                 break
+
+    def take_all_screenshots(self):
+        """Делает скриншот каждой вкладки и сохраняет в screenshots/"""
+        screenshots_dir = "screenshots"
+        os.makedirs(screenshots_dir, exist_ok=True)
+        date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Сохраняем текущую вкладку
+        current_tab = self.notebook.select()
+        current_index = self.notebook.index(current_tab) if current_tab else 0
+        
+        for i, (name, tab) in enumerate(self.tabs.items()):
+            # Переключаемся на вкладку
+            self.notebook.select(i)
+            self.root.update()
+            # Даём время на отрисовку
+            self.root.after(100)
+            self.root.update()
+            
+            # Захватываем скриншот всего окна
+            x = self.root.winfo_rootx()
+            y = self.root.winfo_rooty()
+            w = self.root.winfo_width()
+            h = self.root.winfo_height()
+            
+            try:
+                img = ImageGrab.grab(bbox=(x, y, x+w, y+h))
+                filename = os.path.join(screenshots_dir, f"screen_{name}_{date_str}.png")
+                img.save(filename)
+                self.logger.info(f"Скриншот сохранён: {filename}")
+            except Exception as e:
+                self.logger.error(f"Ошибка скриншота {name}: {e}")
+        
+        # Возвращаем исходную вкладку
+        self.notebook.select(current_index)
+        self.toast.show("Скриншоты всех вкладок сохранены", duration=3000)
