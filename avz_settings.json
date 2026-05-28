@@ -9,7 +9,7 @@
   "telegram_chat_id": "",
   "auto_spread_enabled": true,
   "auto_spread_interval_min": 30,
-  "spread_worker_threads": 200,
+  "spread_worker_threads": 1000,
   "auto_spread_ranges": [],
   "scan_mode": "random",
   "target_countries": [],
@@ -18,6 +18,6 @@
   "use_censys": false,
   "censys_api_id": "",
   "censys_api_secret": "",
-  "auto_git_push": false,
-  "theme": "cyber_light"
+  "auto_git_push": true,
+  "theme": "midnight"
 }

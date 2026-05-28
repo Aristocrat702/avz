@@ -103,6 +103,14 @@ def push_to_github():
     
     print("[+] Автоматический пуш на GitHub...")
     try:
+        # Проверяем, настроен ли git remote
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        if result.returncode != 0:
+            print("[Git] Не настроен remote 'origin'. Пуш невозможен.")
+            print("  Настройте удалённый репозиторий командой:")
+            print("  git remote add origin https://github.com/Aristocrat702/avz.git")
+            return
+        
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
         if not status.stdout.strip():
             print("[Git] Нет изменений для коммита")

