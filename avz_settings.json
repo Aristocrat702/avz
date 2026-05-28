@@ -8,7 +8,7 @@
   "telegram_token": "",
   "telegram_chat_id": "",
   "auto_spread_enabled": true,
-  "auto_spread_interval_min": 30,
+  "auto_spread_interval_min": 30.0,
   "spread_worker_threads": 1000,
   "auto_spread_ranges": [],
   "scan_mode": "random",

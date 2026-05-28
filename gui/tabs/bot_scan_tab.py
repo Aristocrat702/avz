@@ -22,7 +22,7 @@ class BotScanTab(tk.Frame):
         ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
         self.scan_threads = ttk.Entry(settings_frame, width=10)
         self.scan_threads.grid(row=1, column=1, padx=5, sticky=tk.W)
-        self.scan_threads.insert(0, "1000")
+        self.scan_threads.insert(0, "2000")
         add_copy_paste_support(self.scan_threads)
         
         btn_frame = ttk.Frame(self)
