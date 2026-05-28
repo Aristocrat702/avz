@@ -58,7 +58,7 @@ class BotAutoTab(tk.Frame):
     def log_to_auto(self, message):
         tag = 'info'
         lower = message.lower()
-        if 'заражён' in lower or 'infected' in lower or 'success' in lower:
+        if 'успех' in lower or 'infected' in lower:
             tag = 'success'
         elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
             tag = 'error'
@@ -77,27 +77,18 @@ class BotAutoTab(tk.Frame):
         try:
             while True:
                 msg = self.spreader.message_queue.get_nowait()
-                # Обрабатываем известные типы сообщений
-                if msg.startswith("[Stats]") or msg.startswith("[Live]"):
-                    # Парсим числа из строки вида "Просканировано: 123, Заражено: 45"
+                if msg.startswith("[Stats]") or msg.startswith("[Live]") or msg.startswith("[Scan]"):
                     parts = msg.split(',')
                     scanned = None
                     infected = None
                     for part in parts:
                         if 'Просканировано:' in part:
-                            try:
-                                scanned = int(part.split(':')[1].strip())
-                            except:
-                                pass
+                            try: scanned = int(part.split(':')[1].strip())
+                            except: pass
                         if 'Заражено:' in part:
-                            try:
-                                infected = int(part.split(':')[1].strip())
-                            except:
-                                pass
+                            try: infected = int(part.split(':')[1].strip())
+                            except: pass
                     self.update_stats_display(scanned=scanned, infected=infected)
-                    self.log_to_auto(msg)
-                elif msg.startswith("[Progress]"):
-                    # прогресс не обновляем, но можно вывести в лог
                     self.log_to_auto(msg)
                 else:
                     self.log_to_auto(msg)
@@ -130,15 +121,12 @@ class BotAutoTab(tk.Frame):
 
     def save_auto_settings(self):
         try:
-            with open("avz_settings.json","r") as f:
-                s = json.load(f)
-        except:
-            s = {}
+            with open("avz_settings.json","r") as f: s = json.load(f)
+        except: s = {}
         s["auto_spread_interval_min"] = int(self.interval_var.get()) / 60
         s["spread_worker_threads"] = int(self.auto_threads_var.get())
         s["auto_spread_enabled"] = True
-        with open("avz_settings.json","w") as f:
-            json.dump(s, f, indent=2)
+        with open("avz_settings.json","w") as f: json.dump(s, f, indent=2)
 
     def reload_spreader(self):
         self.save_auto_settings()

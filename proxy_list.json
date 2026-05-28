@@ -1,56 +1,31 @@
 [
   {
-    "url": "http://8.221.139.222:199",
+    "url": "http://113.160.132.26:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://174.137.134.182:2999",
+    "url": "http://200.59.193.103:999",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.210.17.35:9443",
+    "url": "http://130.49.218.108:1080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://183.110.216.159:8091",
+    "url": "http://219.65.73.81:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://45.89.106.12:80",
+    "url": "http://162.222.206.167:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://4.213.167.178:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://159.224.232.194:8888",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.119.20.8:8081",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://65.108.203.37:28080",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.211.51.115:443",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.210.17.35:8443",
+    "url": "http://8.213.195.191:8080",
     "type": "http",
     "latency": 0
   },
@@ -60,47 +35,17 @@
     "latency": 0
   },
   {
-    "url": "http://8.211.195.173:3128",
+    "url": "http://47.91.89.3:8443",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.221.139.222:3129",
+    "url": "http://189.232.80.234:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.210.17.35:4321",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://5.250.181.197:3128",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://101.200.158.109:8880",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.238.128.246:1000",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://200.59.193.102:999",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.221.141.88:9992",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.220.204.92:9080",
+    "url": "http://8.220.205.172:9080",
     "type": "http",
     "latency": 0
   },
@@ -110,57 +55,17 @@
     "latency": 0
   },
   {
-    "url": "http://65.108.203.35:18080",
+    "url": "http://8.213.222.247:8008",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.209.96.245:31433",
+    "url": "http://58.241.88.13:800",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.83.168.191:5000",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.238.134.126:9080",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.213.197.208:8081",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.104.28.135:9098",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://193.29.224.20:3128",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.211.51.115:3128",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://38.123.220.147:999",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.104.198.111:8443",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.213.222.247:1080",
+    "url": "http://8.211.194.78:138",
     "type": "http",
     "latency": 0
   },
@@ -170,247 +75,112 @@
     "latency": 0
   },
   {
-    "url": "http://47.251.87.74:8081",
+    "url": "http://8.213.215.187:30000",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://202.133.88.173:80",
+    "url": "http://47.254.36.213:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.148.20.126:9098",
+    "url": "http://47.91.29.151:33427",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.211.42.167:3129",
+    "url": "http://72.56.246.250:1080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.213.195.191:90",
+    "url": "http://8.211.49.86:20002",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://65.109.178.5:8080",
+    "url": "http://8.211.49.86:10801",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://94.131.122.125:1081",
+    "url": "http://8.211.195.173:55555",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.211.194.78:1080",
+    "url": "http://8.209.96.245:1234",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://39.104.27.89:8004",
+    "url": "http://47.91.89.3:176",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.252.18.37:81",
+    "url": "http://213.131.85.26:1981",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://181.174.164.221:80",
+    "url": "http://47.238.134.126:5060",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://109.94.1.23:4050",
+    "url": "http://8.211.51.115:4022",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.121.182.36:8080",
+    "url": "http://177.234.217.85:999",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.76.144.139:8008",
+    "url": "http://8.211.49.86:9080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.209.96.245:8081",
+    "url": "http://8.220.205.172:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://58.241.88.17:800",
+    "url": "http://8.215.12.103:84",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.211.51.115:104",
+    "url": "http://8.213.134.213:1080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.211.200.183:6969",
+    "url": "http://200.59.193.51:999",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.215.15.163:51",
+    "url": "http://133.18.234.13:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://39.102.214.208:3128",
+    "url": "http://8.221.141.88:5631",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://113.192.31.90:8080",
+    "url": "http://141.98.153.86:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.238.60.156:6379",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.211.49.86:50070",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.213.222.157:8081",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.213.215.187:5060",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://115.239.234.43:7302",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://159.65.245.255:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://61.186.243.6:9002",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.250.11.111:81",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://192.99.8.15:8850",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.83.168.191:4000",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.116.126.57:8008",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://39.102.210.222:8086",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://219.93.101.62:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://185.82.218.85:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://8.220.205.172:8008",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://195.26.224.135:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://2.78.60.10:3129",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://16.163.88.228:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://39.102.213.187:8008",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.250.159.65:10002",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.91.89.3:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.251.87.199:3129",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://176.101.220.90:8090",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://209.135.168.41:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.89.159.212:137",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://104.194.144.249:80",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://185.244.41.78:1080",
-    "type": "http",
-    "latency": 0
-  },
-  {
-    "url": "http://47.251.87.199:1081",
+    "url": "http://8.211.200.183:45",
     "type": "http",
     "latency": 0
   },
@@ -420,37 +190,197 @@
     "latency": 0
   },
   {
-    "url": "http://109.236.88.82:80",
+    "url": "http://47.251.74.38:1081",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.91.121.127:1111",
+    "url": "http://12.50.107.217:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://113.204.79.230:9091",
+    "url": "http://8.212.165.164:5008",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.215.12.103:8888",
+    "url": "http://159.65.5.53:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://37.110.147.13:80",
+    "url": "http://188.191.165.159:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://216.10.253.97:80",
+    "url": "http://47.252.11.233:8010",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://157.90.10.15:35204",
+    "url": "http://139.59.105.64:8080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://39.104.23.154:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://203.19.38.114:1080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.238.128.246:9080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.83.168.191:4000",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.250.155.254:3128",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://200.59.193.94:999",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://101.66.198.187:8085",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://94.200.195.220:8080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://27.34.242.98:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.104.27.165:8080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://8.213.197.208:8443",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://193.29.224.20:3128",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.99.112.148:8060",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.252.18.37:10002",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://185.185.40.118:3128",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://8.215.15.163:50",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.238.60.156:3129",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://8.213.222.157:312",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://177.19.167.242:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://39.109.113.97:4090",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.238.130.212:9080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.252.18.37:8080",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://104.168.153.19:3128",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.238.60.156:6379",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://176.111.37.216:39811",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://47.252.18.37:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://193.239.86.180:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://46.17.47.48:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://197.221.249.196:80",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://86.104.74.110:1081",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://79.110.196.134:8081",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://185.191.239.248:3128",
     "type": "http",
     "latency": 0
   },
@@ -460,92 +390,112 @@
     "latency": 0
   },
   {
-    "url": "http://121.204.140.3:8081",
+    "url": "http://193.123.250.39:1080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://200.69.83.205:999",
+    "url": "http://111.79.111.126:3128",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://8.137.13.191:8080",
+    "url": "http://219.93.101.62:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://91.176.4.2:8888",
+    "url": "http://121.174.186.199:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://84.47.150.125:1080",
+    "url": "http://12.50.107.222:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://209.141.46.220:9091",
+    "url": "http://8.215.3.250:5060",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://157.90.10.15:3530",
+    "url": "http://212.127.95.235:8081",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://41.220.16.218:80",
+    "url": "http://183.110.216.128:8091",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://185.234.64.65:1082",
+    "url": "http://157.90.10.15:35053",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://39.102.213.187:18080",
+    "url": "http://195.13.164.73:8080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://14.143.222.113:57718",
+    "url": "http://8.217.90.53:8888",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://157.90.10.15:31292",
+    "url": "http://178.212.144.7:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://43.205.124.6:3128",
+    "url": "http://183.215.23.242:9091",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://174.138.174.138:8254",
+    "url": "http://74.176.195.135:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://157.90.10.15:50508",
+    "url": "http://58.241.88.17:800",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://172.200.72.48:80",
+    "url": "http://221.231.13.198:1080",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://47.245.117.43:80",
+    "url": "http://41.220.16.211:80",
     "type": "http",
     "latency": 0
   },
   {
-    "url": "http://157.90.10.15:45208",
+    "url": "http://157.90.10.15:51050",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://149.129.226.9:32768",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://157.90.10.15:10052",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://185.41.152.110:3128",
+    "type": "http",
+    "latency": 0
+  },
+  {
+    "url": "http://157.90.10.15:5505",
     "type": "http",
     "latency": 0
   }
