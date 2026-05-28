@@ -24,7 +24,7 @@ from gui.themes import THEMES
 from gui.styles import apply_theme
 from utils.logger import Logger
 from utils.toast import ToastManager
-import json, os
+import json, os, glob
 from datetime import datetime
 
 try:
@@ -35,7 +35,7 @@ except ImportError:
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v60.0 // OVERLORD")
+        self.root.title("AVZ-Aristo v68.0 // STORM BREAKER")
         self.root.minsize(1200, 800)
         self.root.geometry("1360x850")
         self.logger = Logger(__name__)
@@ -71,8 +71,10 @@ class App:
         root.bind('<F6>', self._on_f6)
         root.bind('<Control-q>', lambda e: root.destroy())
         
-        self.toast.show("AVZ-Aristo v60.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v68.0 запущен", duration=2000)
         
+        # Очистка старых скриншотов ПЕРЕД созданием новых
+        self.cleanup_screenshots(50)
         self.root.after(2000, self.take_all_screenshots)
 
     def _create_grouped_notebook(self):
@@ -136,6 +138,23 @@ class App:
                     tab.stop()
                     return
 
+    def cleanup_screenshots(self, max_screenshots=50):
+        screenshot_dir = "screenshots"
+        if not os.path.exists(screenshot_dir):
+            return
+        files = glob.glob(os.path.join(screenshot_dir, "screen_*.png"))
+        if len(files) <= max_screenshots:
+            return
+        files.sort(key=os.path.getmtime)
+        to_delete = files[:-max_screenshots]
+        for f in to_delete:
+            try:
+                os.remove(f)
+                self.logger.info(f"Удалён старый скриншот: {f}")
+            except Exception as e:
+                self.logger.error(f"Не удалось удалить {f}: {e}")
+        self.logger.info(f"Очистка скриншотов: удалено {len(to_delete)}, оставлено {min(len(files), max_screenshots)}")
+
     def take_all_screenshots(self):
         screenshots_dir = "screenshots"
         os.makedirs(screenshots_dir, exist_ok=True)
@@ -156,3 +175,5 @@ class App:
                     self.logger.info(f"Скриншот сохранён: {filename}")
                 except Exception as e:
                     self.logger.error(f"Ошибка скриншота: {e}")
+        # Повторная очистка на случай, если старые не удалились
+        self.cleanup_screenshots(50)

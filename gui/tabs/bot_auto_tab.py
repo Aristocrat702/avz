@@ -33,7 +33,7 @@ class BotAutoTab(tk.Frame):
         interval_entry.grid(row=0, column=1, padx=5, sticky=tk.W)
         add_copy_paste_support(interval_entry)
         ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
-        self.auto_threads_var = tk.StringVar(value="1000")
+        self.auto_threads_var = tk.StringVar(value="2000")
         threads_entry = ttk.Entry(settings_frame, textvariable=self.auto_threads_var, width=10)
         threads_entry.grid(row=1, column=1, padx=5, sticky=tk.W)
         add_copy_paste_support(threads_entry)
@@ -58,7 +58,7 @@ class BotAutoTab(tk.Frame):
     def log_to_auto(self, message):
         tag = 'info'
         lower = message.lower()
-        if 'заражён' in lower or 'success' in lower or '[+]' in lower:
+        if 'заражён' in lower or 'infected' in lower or 'success' in lower:
             tag = 'success'
         elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
             tag = 'error'
@@ -77,19 +77,28 @@ class BotAutoTab(tk.Frame):
         try:
             while True:
                 msg = self.spreader.message_queue.get_nowait()
-                if msg.startswith("[Stats]"):
-                    parts = msg.split('|')
-                    scanned_str = parts[0].split(':')[1].strip() if ':' in parts[0] else '0'
-                    infected_str = parts[1].split(':')[1].strip() if len(parts)>1 and ':' in parts[1] else '0'
-                    try:
-                        scanned = int(scanned_str)
-                        infected = int(infected_str)
-                        self.update_stats_display(scanned=scanned, infected=infected)
-                    except:
-                        pass
+                # Обрабатываем известные типы сообщений
+                if msg.startswith("[Stats]") or msg.startswith("[Live]"):
+                    # Парсим числа из строки вида "Просканировано: 123, Заражено: 45"
+                    parts = msg.split(',')
+                    scanned = None
+                    infected = None
+                    for part in parts:
+                        if 'Просканировано:' in part:
+                            try:
+                                scanned = int(part.split(':')[1].strip())
+                            except:
+                                pass
+                        if 'Заражено:' in part:
+                            try:
+                                infected = int(part.split(':')[1].strip())
+                            except:
+                                pass
+                    self.update_stats_display(scanned=scanned, infected=infected)
                     self.log_to_auto(msg)
                 elif msg.startswith("[Progress]"):
-                    pass
+                    # прогресс не обновляем, но можно вывести в лог
+                    self.log_to_auto(msg)
                 else:
                     self.log_to_auto(msg)
         except queue.Empty:
@@ -101,7 +110,7 @@ class BotAutoTab(tk.Frame):
             with open("avz_settings.json") as f:
                 s = json.load(f)
             self.interval_var.set(str(int(s.get("auto_spread_interval_min", 30)*60)))
-            self.auto_threads_var.set(str(s.get("spread_worker_threads", 1000)))
+            self.auto_threads_var.set(str(s.get("spread_worker_threads", 2000)))
             if s.get("auto_spread_enabled"):
                 self.auto_status_label.config(text="Активен")
                 self.toggle_btn.config(text="Остановить")

