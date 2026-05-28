@@ -51,9 +51,9 @@ maxminddb-geolite2
 requests[socks]
 PySocks
 flask
+flask-cors
 monero
 base58
 censys
 psutil
 ipaddress
-telnetlib3

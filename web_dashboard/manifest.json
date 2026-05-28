@@ -1,0 +1,9 @@
+{
+  "name": "AVZ-Aristo",
+  "short_name": "AVZ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#0077ff",
+  "icons": []
+}
