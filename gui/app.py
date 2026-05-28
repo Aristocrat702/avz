@@ -27,7 +27,7 @@ import json
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v46.0 // GLOBAL LEGION")
+        self.root.title("AVZ-Aristo v54.0 // TSUNAMI")
         self.root.minsize(1100, 700)
         self.root.geometry("1280x800")
         self.logger = Logger(__name__)
@@ -35,14 +35,15 @@ class App:
         
         root.app = self
         
+        # По умолчанию тёмная тема
         self.settings = {}
         try:
             with open("avz_settings.json","r") as f:
                 self.settings = json.load(f)
         except:
             pass
-        theme_name = self.settings.get("theme", "cyber_light")
-        self.current_theme = THEMES.get(theme_name, THEMES["cyber_light"])
+        theme_name = self.settings.get("theme", "midnight")  # тёмная по умолчанию
+        self.current_theme = THEMES.get(theme_name, THEMES["midnight"])
         apply_theme(root, self.current_theme)
         
         header = tk.Frame(root, bg=self.current_theme['accent'], height=40)
@@ -55,7 +56,7 @@ class App:
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self._create_notebook()
         
-        self.toast.show("AVZ-Aristo v46.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v54.0 запущен", duration=2000)
 
     def _create_notebook(self):
         tabs = [

