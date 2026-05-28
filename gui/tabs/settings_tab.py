@@ -27,7 +27,6 @@ class SettingsTab(tk.Frame):
         self.tg_token.grid(row=2, column=1, padx=5)
         ttk.Button(main_frame, text="Сохранить", command=self.save_main).grid(row=3, column=0, columnspan=2, pady=10)
         
-        # Тема
         theme_frame = ttk.Frame(nb)
         nb.add(theme_frame, text="Оформление")
         ttk.Label(theme_frame, text="Тема:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
@@ -36,7 +35,6 @@ class SettingsTab(tk.Frame):
         theme_cb.grid(row=0, column=1, padx=5)
         ttk.Button(theme_frame, text="Применить", command=self.apply_theme).grid(row=1, column=0, columnspan=2, pady=10)
         
-        # Обновление
         update_frame = ttk.Frame(nb)
         nb.add(update_frame, text="Обновление")
         ttk.Button(update_frame, text="Проверить обновления", command=self.check_update).pack(pady=10)
@@ -87,7 +85,7 @@ class SettingsTab(tk.Frame):
         threading.Thread(target=self._update_thread).start()
 
     def _update_thread(self):
-        from auto_update import apply_update
+        from deploy.auto_update import apply_update
         if apply_update():
             messagebox.showinfo("Обновление", "Программа обновлена! Перезапустите.")
         else:

@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-from ai_connector import request_improvement, check_connection
+from deploy.ai_connector import request_improvement, check_connection
 import threading
 
 class AIEngineerTab(tk.Frame):
@@ -19,7 +19,7 @@ class AIEngineerTab(tk.Frame):
         ttk.Button(status_frame, text="Проверить связь", command=self.check_vps).pack(side=tk.RIGHT)
         self.check_vps()
         
-        ttk.Label(self, text="Запрос к локальному AI (DeepSeek):").pack(anchor=tk.W, padx=5, pady=5)
+        ttk.Label(self, text="Запрос к AI:").pack(anchor=tk.W, padx=5, pady=5)
         self.desc_entry = tk.Text(self, height=4)
         self.desc_entry.pack(fill=tk.X, padx=5)
         
@@ -27,8 +27,6 @@ class AIEngineerTab(tk.Frame):
         btn_frame.pack(fill=tk.X, padx=5)
         self.send_btn = ttk.Button(btn_frame, text="Отправить на VPS", command=self.send_request)
         self.send_btn.pack(side=tk.LEFT, padx=2)
-        self.local_btn = ttk.Button(btn_frame, text="Спросить локально", command=self.ask_local_ai)
-        self.local_btn.pack(side=tk.LEFT, padx=2)
         
         self.output = scrolledtext.ScrolledText(self, height=10, state=tk.NORMAL)
         self.output.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -55,14 +53,3 @@ class AIEngineerTab(tk.Frame):
         if result.get('status') == 'ok':
             self.output.insert(tk.END, "Манифест применён!\n")
         self.send_btn.config(state=tk.NORMAL)
-
-    def ask_local_ai(self):
-        desc = self.desc_entry.get("1.0", tk.END).strip()
-        if not desc:
-            messagebox.showwarning("Пусто", "Опишите проблему")
-            return
-        # Здесь должна быть интеграция с локальной LLM (DeepSeek API)
-        # Пока заглушка
-        self.output.insert(tk.END, f"[Локальный AI] Анализирую запрос: {desc}\n")
-        # В реальности отправляем запрос к локальному DeepSeek и получаем ответ
-        self.output.insert(tk.END, "[AI] Рекомендую проверить логи и запустить автотесты.\n")

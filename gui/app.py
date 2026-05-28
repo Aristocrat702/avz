@@ -35,7 +35,7 @@ except ImportError:
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v68.0 // STORM BREAKER")
+        self.root.title("AVZ-Aristo v70.0 // STRUCTURED ONSLAUGHT")
         self.root.minsize(1200, 800)
         self.root.geometry("1360x850")
         self.logger = Logger(__name__)
@@ -71,9 +71,8 @@ class App:
         root.bind('<F6>', self._on_f6)
         root.bind('<Control-q>', lambda e: root.destroy())
         
-        self.toast.show("AVZ-Aristo v68.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v70.0 запущен", duration=2000)
         
-        # Очистка старых скриншотов ПЕРЕД созданием новых
         self.cleanup_screenshots(50)
         self.root.after(2000, self.take_all_screenshots)
 
@@ -175,5 +174,4 @@ class App:
                     self.logger.info(f"Скриншот сохранён: {filename}")
                 except Exception as e:
                     self.logger.error(f"Ошибка скриншота: {e}")
-        # Повторная очистка на случай, если старые не удалились
         self.cleanup_screenshots(50)

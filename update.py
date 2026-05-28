@@ -79,55 +79,27 @@ def deploy_to_vps(updated_files):
         return
     print("[+] Деплой на VPS...")
     for file_path in updated_files:
-        remote_dir = os.path.join(VPS_PATH, os.path.dirname(file_path))
-        cmd = f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no {file_path} {VPS_USER}@{VPS_HOST}:{remote_dir}/"
+        if file_path.startswith("deploy/"):
+            remote_path = file_path.replace("deploy/", "")
+            remote_dir = os.path.join(VPS_PATH, os.path.dirname(remote_path))
+            cmd = f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no deploy/{remote_path} {VPS_USER}@{VPS_HOST}:{remote_dir}/"
+        elif file_path.startswith("services/"):
+            remote_path = file_path.replace("services/", "")
+            remote_dir = os.path.join(VPS_PATH, os.path.dirname(remote_path))
+            cmd = f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no services/{remote_path} {VPS_USER}@{VPS_HOST}:{remote_dir}/"
+        else:
+            remote_dir = os.path.join(VPS_PATH, os.path.dirname(file_path))
+            cmd = f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no {file_path} {VPS_USER}@{VPS_HOST}:{remote_dir}/"
         subprocess.run(cmd, shell=True, capture_output=True)
         print(f"[VPS] Загружен: {file_path}")
     subprocess.run(f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no -r web_dashboard {VPS_USER}@{VPS_HOST}:{VPS_PATH}/web_dashboard", shell=True, capture_output=True)
     print("[VPS] Папка web_dashboard синхронизирована")
-    restart_cmd = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no {VPS_USER}@{VPS_HOST} 'pkill python3; cd {VPS_PATH} && python3 server.py &'"
+    restart_cmd = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no {VPS_USER}@{VPS_HOST} 'pkill python3; cd {VPS_PATH} && python3 deploy/server.py &'"
     subprocess.run(restart_cmd, shell=True, capture_output=True)
     print("[VPS] Сервер перезапущен")
-
-def push_to_github():
-    """Автоматический git push, если включено в настройках"""
-    try:
-        with open("avz_settings.json", "r") as f:
-            settings = json.load(f)
-    except:
-        settings = {}
-    
-    if not settings.get("auto_git_push", False):
-        print("[Git] Авто-пуш отключён в настройках (auto_git_push: false)")
-        return
-    
-    print("[+] Автоматический пуш на GitHub...")
-    try:
-        # Проверяем, настроен ли git remote
-        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
-        if result.returncode != 0:
-            print("[Git] Не настроен remote 'origin'. Пуш невозможен.")
-            print("  Настройте удалённый репозиторий командой:")
-            print("  git remote add origin https://github.com/Aristocrat702/avz.git")
-            return
-        
-        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        if not status.stdout.strip():
-            print("[Git] Нет изменений для коммита")
-            return
-        
-        subprocess.run(["git", "add", "-A"], check=True)
-        with open("version.json") as f:
-            ver = json.load(f).get("version", "unknown")
-        subprocess.run(["git", "commit", "-m", f"auto: apply manifest v{ver}"], check=True)
-        subprocess.run(["git", "push"], check=True)
-        print("[Git] Изменения отправлены на GitHub")
-    except Exception as e:
-        print(f"[Git] Ошибка при пуше: {e}")
 
 if __name__ == "__main__":
     updated = apply_manifest()
     if updated:
         deploy_to_vps(updated)
-        push_to_github()
-        print("[✓] Обновление завершено.")
+        print("[✓] Деплой на VPS завершён.")

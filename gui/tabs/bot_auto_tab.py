@@ -23,6 +23,7 @@ class BotAutoTab(tk.Frame):
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
         self.toggle_btn = ttk.Button(btn_frame, text="Запустить", command=self.toggle_spreader)
         self.toggle_btn.pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Принудительный цикл", command=self.force_cycle).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Применить настройки", command=self.reload_spreader).pack(side=tk.LEFT, padx=2)
         
         settings_frame = ttk.LabelFrame(self, text="Параметры")
@@ -44,6 +45,10 @@ class BotAutoTab(tk.Frame):
         self.scanned_label.pack(side=tk.LEFT, padx=10)
         self.infected_label = ttk.Label(stats_frame, text="Заражено: 0", font=('Consolas', 9))
         self.infected_label.pack(side=tk.LEFT, padx=10)
+        
+        self.progress_var = tk.IntVar()
+        self.progress_bar = ttk.Progressbar(self, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, padx=5, pady=2)
         
         self.auto_log = scrolledtext.ScrolledText(self, height=10, state=tk.NORMAL, font=('Consolas', 10))
         self.auto_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -90,6 +95,11 @@ class BotAutoTab(tk.Frame):
                             except: pass
                     self.update_stats_display(scanned=scanned, infected=infected)
                     self.log_to_auto(msg)
+                elif msg.startswith("[Progress]"):
+                    try:
+                        pct = int(msg.split("(")[1].split("%")[0])
+                        self.progress_var.set(pct)
+                    except: pass
                 else:
                     self.log_to_auto(msg)
         except queue.Empty:
@@ -112,12 +122,25 @@ class BotAutoTab(tk.Frame):
             self.spreader.stop()
             self.auto_status_label.config(text="Неактивен")
             self.toggle_btn.config(text="Запустить")
+            # Автосохранение лога при остановке
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"auto_log_{timestamp}.txt"
+            with open(filename, 'w') as f:
+                f.write(self.auto_log.get(1.0, tk.END))
+            self.log_to_auto(f"[Auto] Лог сохранён: {filename}")
         else:
             self.save_auto_settings()
             self.spreader.load_settings("avz_settings.json")
             self.spreader.start()
             self.auto_status_label.config(text="Активен")
             self.toggle_btn.config(text="Остановить")
+
+    def force_cycle(self):
+        if not self.spreader.running:
+            messagebox.showwarning("Неактивен", "Сначала запустите автозахват")
+            return
+        self.spreader.force_cycle = True
+        self.log_to_auto("[Автозахват] Запрошен принудительный цикл")
 
     def save_auto_settings(self):
         try:

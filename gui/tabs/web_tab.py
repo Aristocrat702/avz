@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-from web_hacking import SQLInjector, CMSScanner
+from services.web_hacking import SQLInjector, CMSScanner
 import threading
 
 class WebTab(tk.Frame):
@@ -12,7 +12,6 @@ class WebTab(tk.Frame):
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True)
         
-        # SQL Injection
         sql_frame = ttk.Frame(nb)
         nb.add(sql_frame, text="SQL-инъекции")
         
@@ -30,7 +29,6 @@ class WebTab(tk.Frame):
         ttk.Button(btn_frame, text="Дамп БД", command=self.dump_db).pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="Список БД", command=self.list_dbs).pack(side=tk.LEFT, padx=5)
 
-        # CMS Exploiter
         cms_frame = ttk.Frame(nb)
         nb.add(cms_frame, text="CMS-эксплойты")
         ttk.Label(cms_frame, text="URL сайта:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
@@ -38,7 +36,6 @@ class WebTab(tk.Frame):
         self.cms_url.grid(row=0, column=1, padx=5)
         ttk.Button(cms_frame, text="Сканировать и взломать", command=self.exploit_cms).grid(row=1, column=0, columnspan=2, pady=10)
 
-        # Output
         self.output = scrolledtext.ScrolledText(self, width=80, height=15)
         self.output.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
