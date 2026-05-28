@@ -11,8 +11,10 @@ class BotnetTab(tk.Frame):
         super().__init__(parent)
         self.bot_data = []
         self.spreader = AutoSpreader()
+        self.auto_refresh_enabled = True
         self.build_ui()
         self.load_bots()
+        self.start_auto_refresh()
 
     def build_ui(self):
         nb = ttk.Notebook(self)
@@ -25,6 +27,9 @@ class BotnetTab(tk.Frame):
         control_frame.pack(fill=tk.X, padx=5, pady=5)
         ttk.Button(control_frame, text="Обновить", command=self.load_bots).pack(side=tk.LEFT, padx=2)
         ttk.Button(control_frame, text="Массовая атака", command=self.mass_attack).pack(side=tk.LEFT, padx=2)
+        self.auto_refresh_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(control_frame, text="Автообновление", variable=self.auto_refresh_var,
+                        command=self.toggle_auto_refresh).pack(side=tk.LEFT, padx=5)
         filter_frame = ttk.Frame(list_frame)
         filter_frame.pack(fill=tk.X, padx=5)
         ttk.Label(filter_frame, text="Фильтр:").pack(side=tk.LEFT)
@@ -67,7 +72,6 @@ class BotnetTab(tk.Frame):
         ttk.Button(btn_frame, text="Копировать лог", command=self.copy_log).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Сохранить лог", command=self.save_log).pack(side=tk.LEFT, padx=2)
         
-        # Прогресс-бар
         self.progress_var = tk.IntVar()
         self.progress_bar = ttk.Progressbar(scan_frame, variable=self.progress_var, maximum=100)
         self.progress_bar.pack(fill=tk.X, padx=5, pady=2)
@@ -93,6 +97,16 @@ class BotnetTab(tk.Frame):
 
         self.process_messages()
 
+    def start_auto_refresh(self):
+        if self.auto_refresh_enabled:
+            self.load_bots()
+            self.after(30000, self.start_auto_refresh)
+
+    def toggle_auto_refresh(self):
+        self.auto_refresh_enabled = self.auto_refresh_var.get()
+        if self.auto_refresh_enabled:
+            self.start_auto_refresh()
+
     def log_to_scan(self, message):
         self.scan_log.insert(tk.END, message + "\n")
         self.scan_log.see(tk.END)
@@ -114,7 +128,6 @@ class BotnetTab(tk.Frame):
             while True:
                 msg = self.spreader.message_queue.get_nowait()
                 self.log_to_scan(msg)
-                # Обновление прогресс-бара
                 if "[Progress]" in msg:
                     try:
                         pct = int(msg.split("(")[1].split("%")[0])
@@ -154,7 +167,6 @@ class BotnetTab(tk.Frame):
     def stop_scan(self):
         self.spreader.stop()
         self.log_to_scan("[Сканирование] Остановлено")
-        # Автосохранение лога при остановке
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         auto_filename = f"scan_log_{timestamp}.txt"
         with open(auto_filename, 'w') as f:
@@ -218,15 +230,7 @@ class BotnetTab(tk.Frame):
         for bot in data:
             status = bot.get("status","offline")
             os_type = bot.get("os","linux")
-            # Иконка ОС (текстовая)
-            if os_type == "linux":
-                os_icon = "🐧 Linux"
-            elif os_type == "windows":
-                os_icon = "🪟 Windows"
-            elif os_type == "iot":
-                os_icon = "📡 IoT"
-            else:
-                os_icon = os_type
+            os_icon = {"linux":"🐧 Linux","windows":"🪟 Windows","iot":"📡 IoT"}.get(os_type, os_type)
             tag = "online" if status == "online" else "offline"
             self.tree.insert("", tk.END, values=(
                 bot.get("id",""),

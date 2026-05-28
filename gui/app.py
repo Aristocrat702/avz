@@ -27,7 +27,7 @@ import json
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v54.0 // TSUNAMI")
+        self.root.title("AVZ-Aristo v55.0 // NIGHTFALL")
         self.root.minsize(1100, 700)
         self.root.geometry("1280x800")
         self.logger = Logger(__name__)
@@ -35,14 +35,13 @@ class App:
         
         root.app = self
         
-        # По умолчанию тёмная тема
         self.settings = {}
         try:
             with open("avz_settings.json","r") as f:
                 self.settings = json.load(f)
         except:
             pass
-        theme_name = self.settings.get("theme", "midnight")  # тёмная по умолчанию
+        theme_name = self.settings.get("theme", "midnight")
         self.current_theme = THEMES.get(theme_name, THEMES["midnight"])
         apply_theme(root, self.current_theme)
         
@@ -56,7 +55,12 @@ class App:
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self._create_notebook()
         
-        self.toast.show("AVZ-Aristo v54.0 запущен", duration=2000)
+        # Горячие клавиши
+        root.bind('<F5>', lambda e: self._on_f5())
+        root.bind('<F6>', lambda e: self._on_f6())
+        root.bind('<Control-q>', lambda e: root.destroy())
+        
+        self.toast.show("AVZ-Aristo v55.0 запущен", duration=2000)
 
     def _create_notebook(self):
         tabs = [
@@ -80,5 +84,23 @@ class App:
             ("Справка", HelpTab),
         ]
         for name, TabClass in tabs:
-            tab = TabClass(self.notebook)
-            self.notebook.add(tab, text=name)
+            try:
+                tab = TabClass(self.notebook)
+                self.notebook.add(tab, text=name)
+            except Exception as e:
+                self.logger.error(f"Ошибка загрузки вкладки {name}: {e}")
+
+    def _on_f5(self):
+        # Найти вкладку атаки и запустить атаку
+        for tab_id in self.notebook.tabs():
+            tab = self.notebook.nametowidget(tab_id)
+            if isinstance(tab, AttackTab):
+                tab.start()
+                break
+
+    def _on_f6(self):
+        for tab_id in self.notebook.tabs():
+            tab = self.notebook.nametowidget(tab_id)
+            if isinstance(tab, AttackTab):
+                tab.stop()
+                break

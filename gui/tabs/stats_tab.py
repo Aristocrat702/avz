@@ -1,7 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-import json, os, time
-from datetime import datetime, timedelta
+import json, os
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
@@ -19,14 +18,18 @@ class StatsTab(tk.Frame):
         self.update_stats()
 
     def update_stats(self):
-        # Загружаем bots.json и считаем статистику
         bots = []
         if os.path.exists("bots.json"):
             with open("bots.json", 'r') as f:
                 try:
-                    bots = json.load(f)
+                    raw = json.load(f)
                 except:
-                    pass
+                    raw = []
+            for item in raw:
+                if isinstance(item, dict):
+                    bots.append(item)
+                elif isinstance(item, str):
+                    bots.append({"ip": item, "os": "linux", "status": "offline"})
         # Распределение по типу ОС
         os_counts = {"linux":0, "windows":0, "iot":0}
         for bot in bots:
@@ -40,11 +43,9 @@ class StatsTab(tk.Frame):
         self.ax1.set_title('Боты по типам ОС')
         self.ax1.set_ylabel('Количество')
         
-        # График заражений по дням (заглушка: из файла логов)
-        # Здесь можно парсить avz.log, но пока просто демонстрация
         self.ax2.clear()
-        self.ax2.set_title('Заражения за последние 7 дней (демо)')
-        self.ax2.set_xlabel('День')
+        self.ax2.set_title('Заражения (данные обновляются)')
+        self.ax2.set_xlabel('Время')
         self.ax2.set_ylabel('Ботов')
         self.canvas.draw()
-        self.after(60000, self.update_stats)  # обновление раз в минуту
+        self.after(60000, self.update_stats)

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, scrolledtext
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 from engine.attack import stats
@@ -20,6 +20,10 @@ class MonitorTab(tk.Frame):
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100)
         self.tree.pack(fill=tk.X, padx=5, pady=5)
+
+        # Лента событий
+        self.event_log = scrolledtext.ScrolledText(self, height=8, state=tk.NORMAL)
+        self.event_log.pack(fill=tk.X, padx=5, pady=5)
 
         self.mbps_data = []
         self.times = []
@@ -45,36 +49,44 @@ class MonitorTab(tk.Frame):
         while self.running:
             mbps, active = loop.run_until_complete(stats.get_stats())
             self.mbps_data.append(mbps)
-            # Используем числовой индекс для оси X
-            self.times.append(len(self.times))  # просто счётчик
+            self.times.append(len(self.times))
             if len(self.mbps_data) > 60:
                 self.mbps_data.pop(0)
                 self.times.pop(0)
             self.queue.put((mbps, active))
+            # Добавляем события из лога атак (последние)
+            tasks = stats.get_tasks()
+            for task in tasks[-5:]:
+                self.queue.put((f"[Attack] {task['method']} -> {task['target']}", None))
             time.sleep(1)
 
-    def update_gui(self, mbps, active):
-        self.ax.clear()
-        if self.mbps_data:
-            self.ax.plot(self.times, self.mbps_data, color='#0077ff')
-            self.ax.set_title(f"Скорость атаки (Mbps) | Активных: {active}")
-            self.ax.set_xlabel("Время (с)")
-            self.ax.set_ylabel("Mbps")
-            self.fig.tight_layout()
-            self.canvas.draw()
+    def update_gui(self, data, active):
+        if active is not None:
+            self.ax.clear()
+            if self.mbps_data:
+                self.ax.plot(self.times, self.mbps_data, color='#0077ff')
+                self.ax.set_title(f"Скорость атаки (Mbps) | Активных: {active}")
+                self.ax.set_xlabel("Время (с)")
+                self.ax.set_ylabel("Mbps")
+                self.fig.tight_layout()
+                self.canvas.draw()
 
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        tasks = stats.get_tasks()
-        now = time.time()
-        for task in tasks:
-            remaining = max(0, task['end'] - now)
-            self.tree.insert("", tk.END, values=(
-                task.get('id', '?'),
-                task['target'],
-                task['method'],
-                f"{int(remaining)}с"
-            ))
+            for row in self.tree.get_children():
+                self.tree.delete(row)
+            tasks = stats.get_tasks()
+            now = time.time()
+            for task in tasks:
+                remaining = max(0, task['end'] - now)
+                self.tree.insert("", tk.END, values=(
+                    task.get('id', '?'),
+                    task['target'],
+                    task['method'],
+                    f"{int(remaining)}с"
+                ))
+        else:
+            # Это просто сообщение события
+            self.event_log.insert(tk.END, data + "\n")
+            self.event_log.see(tk.END)
 
     def destroy(self):
         self.running = False

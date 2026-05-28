@@ -2,7 +2,7 @@ import logging
 import sys
 
 class Logger:
-    def __init__(self, name=__name__):
+    def __init__(self, name: str = __name__):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
         if not self.logger.handlers:
@@ -14,20 +14,20 @@ class Logger:
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
 
-    def info(self, message):
+    def info(self, message: str) -> None:
         self.logger.info(message)
 
-    def warning(self, message):
+    def warning(self, message: str) -> None:
         self.logger.warning(message)
 
-    def error(self, message):
+    def error(self, message: str) -> None:
         self.logger.error(message)
 
-    def debug(self, message):
+    def debug(self, message: str) -> None:
         self.logger.debug(message)
 
 
-def log(message: str, level: str = 'info'):
+def log(message: str, level: str = 'info') -> None:
     if level == 'warning':
         logging.warning(message)
     elif level == 'error':
