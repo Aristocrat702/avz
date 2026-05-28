@@ -3,7 +3,7 @@ from tkinter import ttk, messagebox, simpledialog
 import json, os, threading
 from botnet.c2 import broadcast_command
 from utils.logger import log
-from utils.widgets import ToolTip
+from utils.widgets import ToolTip, add_copy_paste_support
 
 class BotListTab(tk.Frame):
     def __init__(self, parent):
@@ -31,6 +31,7 @@ class BotListTab(tk.Frame):
             self.tree.heading(col, text=col, command=lambda c=col: self.sort_by(c))
             self.tree.column(col, width=120)
         self.tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        add_copy_paste_support(self.tree)
         self.tree.bind("<Button-3>", self.show_context_menu)
         self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="Атаковать", command=self.context_attack)
