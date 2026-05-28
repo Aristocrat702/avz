@@ -29,15 +29,17 @@ class ToolTip:
             self.tip_window = None
 
 def add_copy_paste_support(widget):
-    """Добавляет стандартное контекстное меню и горячие клавиши для копирования/вставки."""
-    if isinstance(widget, tk.Text):
+    """Добавляет контекстное меню и горячие клавиши для копирования/вставки."""
+    if isinstance(widget, tk.Text) or isinstance(widget, tk.Entry):
         widget.bind('<Control-c>', lambda e: widget.event_generate('<<Copy>>'))
         widget.bind('<Control-x>', lambda e: widget.event_generate('<<Cut>>'))
         widget.bind('<Control-v>', lambda e: widget.event_generate('<<Paste>>'))
-    elif isinstance(widget, tk.Entry):
-        widget.bind('<Control-c>', lambda e: widget.event_generate('<<Copy>>'))
-        widget.bind('<Control-x>', lambda e: widget.event_generate('<<Cut>>'))
-        widget.bind('<Control-v>', lambda e: widget.event_generate('<<Paste>>'))
+        menu = tk.Menu(widget, tearoff=0)
+        menu.add_command(label="Копировать", command=lambda: widget.event_generate('<<Copy>>'))
+        menu.add_command(label="Вставить", command=lambda: widget.event_generate('<<Paste>>'))
+        def show_menu(event):
+            menu.post(event.x_root, event.y_root)
+        widget.bind('<Button-3>', show_menu)
     elif isinstance(widget, ttk.Treeview):
         def copy_tree_selection(event=None):
             selection = widget.selection()

