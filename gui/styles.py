@@ -27,11 +27,13 @@ def apply_theme(root, theme):
         borderwidth=1,
         focusthickness=0,
         padding=6,
-        font=('Segoe UI', 9, 'bold')
+        font=('Segoe UI', 9, 'bold'),
+        relief='raised'
     )
     style.map('TButton',
-        background=[('active', colors['button_active_bg'])],
-        foreground=[('active', colors['button_active_fg'])]
+        background=[('active', colors['button_active_bg']), ('pressed', colors['button_active_bg'])],
+        foreground=[('active', colors['button_active_fg']), ('pressed', colors['button_active_fg'])],
+        relief=[('pressed', 'sunken')]
     )
 
     style.configure('TEntry',
@@ -54,7 +56,8 @@ def apply_theme(root, theme):
 
     style.configure('TProgressbar',
         background=colors['progress_color'],
-        troughcolor=colors['progress_bg']
+        troughcolor=colors['progress_bg'],
+        thickness=18
     )
 
     style.configure('Treeview',

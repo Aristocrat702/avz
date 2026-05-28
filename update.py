@@ -20,7 +20,7 @@ PROTECTED_FILES = {
 
 VPS_HOST = "80.249.146.202"
 VPS_USER = "root"
-VPS_PATH = "/root/c2"  # папка проекта на VPS
+VPS_PATH = "/root/c2"
 SSH_KEY = os.path.expanduser("~/.ssh/avz_vps")
 
 def install_missing_dependencies(requirements_file="requirements.txt"):
@@ -45,7 +45,7 @@ def install_missing_dependencies(requirements_file="requirements.txt"):
 def apply_manifest():
     if not os.path.exists(MANIFEST_FILE):
         print("[!] manifest.json не найден")
-        return
+        return []
 
     with open(MANIFEST_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -74,27 +74,52 @@ def apply_manifest():
     return updated
 
 def deploy_to_vps(updated_files):
-    """Копирует обновлённые файлы и папки на VPS"""
     if not os.path.exists(SSH_KEY):
         print("[!] SSH-ключ не найден. Деплой на VPS пропущен.")
         return
     print("[+] Деплой на VPS...")
-    # Копируем обновлённые файлы
     for file_path in updated_files:
         remote_dir = os.path.join(VPS_PATH, os.path.dirname(file_path))
         cmd = f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no {file_path} {VPS_USER}@{VPS_HOST}:{remote_dir}/"
         subprocess.run(cmd, shell=True, capture_output=True)
         print(f"[VPS] Загружен: {file_path}")
-    # Копируем папку web_dashboard целиком (если есть изменения)
     subprocess.run(f"scp -i {SSH_KEY} -o StrictHostKeyChecking=no -r web_dashboard {VPS_USER}@{VPS_HOST}:{VPS_PATH}/web_dashboard", shell=True, capture_output=True)
     print("[VPS] Папка web_dashboard синхронизирована")
-    # Перезапускаем сервер на VPS
     restart_cmd = f"ssh -i {SSH_KEY} -o StrictHostKeyChecking=no {VPS_USER}@{VPS_HOST} 'pkill python3; cd {VPS_PATH} && python3 server.py &'"
     subprocess.run(restart_cmd, shell=True, capture_output=True)
     print("[VPS] Сервер перезапущен")
+
+def push_to_github():
+    """Автоматический git push, если включено в настройках"""
+    try:
+        with open("avz_settings.json", "r") as f:
+            settings = json.load(f)
+    except:
+        settings = {}
+    
+    if not settings.get("auto_git_push", False):
+        print("[Git] Авто-пуш отключён в настройках (auto_git_push: false)")
+        return
+    
+    print("[+] Автоматический пуш на GitHub...")
+    try:
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if not status.stdout.strip():
+            print("[Git] Нет изменений для коммита")
+            return
+        
+        subprocess.run(["git", "add", "-A"], check=True)
+        with open("version.json") as f:
+            ver = json.load(f).get("version", "unknown")
+        subprocess.run(["git", "commit", "-m", f"auto: apply manifest v{ver}"], check=True)
+        subprocess.run(["git", "push"], check=True)
+        print("[Git] Изменения отправлены на GitHub")
+    except Exception as e:
+        print(f"[Git] Ошибка при пуше: {e}")
 
 if __name__ == "__main__":
     updated = apply_manifest()
     if updated:
         deploy_to_vps(updated)
-        print("[✓] Деплой на VPS завершён.")
+        push_to_github()
+        print("[✓] Обновление завершено.")

