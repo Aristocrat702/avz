@@ -1,6 +1,4 @@
-import requests
-import json
-import threading
+import requests, json, threading
 from utils.logger import log
 
 try:
@@ -38,8 +36,7 @@ class TelegramBot:
                 threading.Event().wait(5)
 
     def process_update(self, upd):
-        if 'message' not in upd:
-            return
+        if 'message' not in upd: return
         msg = upd['message']
         if 'voice' in msg and VOICE_AVAILABLE:
             self._process_voice(msg)
@@ -53,9 +50,7 @@ class TelegramBot:
         file_path = file_info['result']['file_path']
         file_url = f"https://api.telegram.org/file/bot{self.token}/{file_path}"
         audio_data = requests.get(file_url).content
-        with open("voice.ogg", "wb") as f:
-            f.write(audio_data)
-        # Конвертация и распознавание
+        with open("voice.ogg", "wb") as f: f.write(audio_data)
         r = sr.Recognizer()
         with sr.AudioFile("voice.ogg") as source:
             audio = r.record(source)
@@ -75,12 +70,10 @@ class TelegramBot:
             self.send_message(f"Команда не распознана: {text}")
 
     def _cmd_attack(self, text):
-        # Извлекаем цель
         parts = text.split()
         if len(parts) >= 2:
             target = parts[1]
             self.send_message(f"Запускаю атаку на {target}")
-            # Здесь можно реально запустить атаку через движок
         else:
             self.send_message("Укажите цель: атака example.com")
 

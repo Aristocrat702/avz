@@ -28,17 +28,13 @@ class Logger:
 
 
 def log(message: str, level: str = 'info'):
-    """Глобальная функция логирования. level: 'info', 'warning', 'error'"""
     if level == 'warning':
         logging.warning(message)
     elif level == 'error':
         logging.error(message)
     else:
         logging.info(message)
-    # Не дублируем print, если не нужно; оставим только в лог
-    # print(message)
 
-# Базовая настройка
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',

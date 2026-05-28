@@ -13,7 +13,6 @@ class SettingsTab(tk.Frame):
         nb = ttk.Notebook(self)
         nb.pack(fill=tk.BOTH, expand=True)
         
-        # Основные настройки
         main_frame = ttk.Frame(nb)
         nb.add(main_frame, text="Основные")
         
@@ -36,6 +35,11 @@ class SettingsTab(tk.Frame):
         theme_cb = ttk.Combobox(theme_frame, textvariable=self.theme_var, values=list(THEMES.keys()), state="readonly")
         theme_cb.grid(row=0, column=1, padx=5)
         ttk.Button(theme_frame, text="Применить", command=self.apply_theme).grid(row=1, column=0, columnspan=2, pady=10)
+        
+        # Обновление
+        update_frame = ttk.Frame(nb)
+        nb.add(update_frame, text="Обновление")
+        ttk.Button(update_frame, text="Проверить обновления", command=self.check_update).pack(pady=10)
         
         self.load_settings()
 
@@ -73,7 +77,18 @@ class SettingsTab(tk.Frame):
         s["theme"] = theme_name
         with open("avz_settings.json", "w") as f:
             json.dump(s, f, indent=2)
-        # Обновляем тему в приложении
-        self.master.master.master.current_theme = THEMES[theme_name]
-        apply_theme(self.master.master.master.root, THEMES[theme_name])
-        messagebox.showinfo("Тема", f"Тема '{theme_name}' применена. Перезапустите для полного обновления.")
+        app = self.winfo_toplevel().app
+        app.current_theme = THEMES[theme_name]
+        apply_theme(app.root, THEMES[theme_name])
+        messagebox.showinfo("Тема", f"Тема '{theme_name}' применена. Рекомендуется перезапуск.")
+
+    def check_update(self):
+        import threading
+        threading.Thread(target=self._update_thread).start()
+
+    def _update_thread(self):
+        from auto_update import apply_update
+        if apply_update():
+            messagebox.showinfo("Обновление", "Программа обновлена! Перезапустите.")
+        else:
+            messagebox.showinfo("Обновление", "Нет новых версий или произошла ошибка.")

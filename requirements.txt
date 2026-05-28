@@ -50,3 +50,10 @@ geoip2
 maxminddb-geolite2
 requests[socks]
 PySocks
+flask
+monero
+base58
+censys
+psutil
+ipaddress
+telnetlib3

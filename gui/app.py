@@ -17,6 +17,7 @@ from gui.tabs.web_tab import WebTab
 from gui.tabs.diagnostic_tab import DiagnosticTab
 from gui.tabs.constructor_tab import ConstructorTab
 from gui.tabs.packet_tab import PacketTab
+from gui.tabs.ai_engineer_tab import AIEngineerTab
 from gui.themes import THEMES
 from gui.styles import apply_theme
 from utils.logger import Logger
@@ -26,7 +27,7 @@ import json
 class App:
     def __init__(self, root):
         self.root = root
-        self.root.title("AVZ-Aristo v43.0 // GLOBAL DOMINATION")
+        self.root.title("AVZ-Aristo v46.0 // GLOBAL LEGION")
         self.root.minsize(1100, 700)
         self.root.geometry("1280x800")
         self.logger = Logger(__name__)
@@ -54,7 +55,7 @@ class App:
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         self._create_notebook()
         
-        self.toast.show("AVZ-Aristo v43.0 запущен", duration=2000)
+        self.toast.show("AVZ-Aristo v46.0 запущен", duration=2000)
 
     def _create_notebook(self):
         tabs = [
@@ -66,6 +67,7 @@ class App:
             ("Веб-взлом", WebTab),
             ("Эксфильтрация", ExfilTab),
             ("AI-Анализ", AITab),
+            ("AI-Инженер", AIEngineerTab),
             ("Конструктор атак", ConstructorTab),
             ("Планировщик", AutoTab),
             ("Прокси", ProxyTab),
