@@ -34,7 +34,7 @@ class BotAutoTab(tk.Frame):
         interval_entry.grid(row=0, column=1, padx=5, sticky=tk.W)
         add_copy_paste_support(interval_entry)
         ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
-        self.auto_threads_var = tk.StringVar(value="2000")
+        self.auto_threads_var = tk.StringVar(value="5000")
         threads_entry = ttk.Entry(settings_frame, textvariable=self.auto_threads_var, width=10)
         threads_entry.grid(row=1, column=1, padx=5, sticky=tk.W)
         add_copy_paste_support(threads_entry)
@@ -104,14 +104,14 @@ class BotAutoTab(tk.Frame):
                     self.log_to_auto(msg)
         except queue.Empty:
             pass
-        self.after(200, self.process_messages)
+        self.after(500, self.process_messages)
 
     def load_auto_settings(self):
         try:
             with open("avz_settings.json") as f:
                 s = json.load(f)
             self.interval_var.set(str(int(s.get("auto_spread_interval_min", 30)*60)))
-            self.auto_threads_var.set(str(s.get("spread_worker_threads", 2000)))
+            self.auto_threads_var.set(str(s.get("spread_worker_threads", 5000)))
             if s.get("auto_spread_enabled"):
                 self.auto_status_label.config(text="Активен")
                 self.toggle_btn.config(text="Остановить")
@@ -122,7 +122,6 @@ class BotAutoTab(tk.Frame):
             self.spreader.stop()
             self.auto_status_label.config(text="Неактивен")
             self.toggle_btn.config(text="Запустить")
-            # Автосохранение лога при остановке
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             filename = f"auto_log_{timestamp}.txt"
             with open(filename, 'w') as f:

