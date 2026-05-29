@@ -8,7 +8,11 @@ SOURCES = [
     "https://raw.githubusercontent.com/jetkai/proxy-list/main/online-proxies/txt/proxies.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
     "https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt",
-    "https://spys.me/proxy.txt"
+    "https://spys.me/proxy.txt",
+    "https://feodotracker.abuse.ch/downloads/ipblocklist.csv",
+    "https://lists.blocklist.de/lists/all.txt",
+    "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
+    "https://talosintelligence.com/documents/ip-blacklist"
 ]
 
 async def fetch_targets():

