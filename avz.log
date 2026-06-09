@@ -3383,3 +3383,6 @@ got a 301 redirect to 'https://bfl.plus/'. Do you want to follow? [Y/n] Y
 2026-05-29 13:59:30,808 - INFO - Очистка скриншотов: удалено 20, оставлено 50
 2026-05-29 13:59:46,023 - INFO - [TargetCollector] Ошибка https://spys.me/proxy.txt: 
 2026-05-29 13:59:53,841 - INFO - [TargetCollector] Собрано 29310 IP
+2026-05-29 22:30:45,112 - INFO - AutoSpreader инициализирован
+2026-05-29 22:30:58,432 - INFO - AutoSpreader инициализирован
+2026-05-30 12:40:48,867 - INFO - AutoSpreader инициализирован
